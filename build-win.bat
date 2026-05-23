@@ -41,6 +41,9 @@ if "!ISCC!"=="" (
     if exist "%ProgramFiles%\Inno Setup 6\ISCC.exe" set "ISCC=%ProgramFiles%\Inno Setup 6\ISCC.exe"
 )
 if "!ISCC!"=="" (
+    if exist "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" set "ISCC=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
+)
+if "!ISCC!"=="" (
     echo.
     echo Could not find ISCC.exe ^(Inno Setup 6 compiler^).
     echo Install Inno Setup 6 from https://jrsoftware.org/isdl.php
