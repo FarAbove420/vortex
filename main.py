@@ -123,6 +123,32 @@ def fmt_eta(sec: int) -> str:
     if sec < 3600: return f"{sec//60}m {sec%60:02d}s"
     return                f"{sec//3600}h {(sec%3600)//60}m"
 
+def open_path(path: str):
+    p = Path(path)
+    if not p.exists():
+        return
+    try:
+        if sys.platform == "win32":
+            os.startfile(str(p))
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(p)], **SUBPROCESS_FLAGS)
+        else:
+            subprocess.Popen(["xdg-open", str(p)], **SUBPROCESS_FLAGS)
+    except Exception:
+        pass
+
+def reveal_in_folder(path: str):
+    p = Path(path)
+    try:
+        if sys.platform == "win32" and p.exists():
+            subprocess.Popen(["explorer", "/select,", str(p)])
+        elif sys.platform == "darwin" and p.exists():
+            subprocess.Popen(["open", "-R", str(p)])
+        elif p.parent.exists():
+            open_path(str(p.parent))
+    except Exception:
+        pass
+
 def get_default_browser() -> str:
     if sys.platform == "win32":
         try:
@@ -240,6 +266,7 @@ class Item:
         self.eta     = 0
         self.total   = 0
         self.error   = ""
+        self.filepath = ""
         self.added   = datetime.now().strftime("%H:%M:%S")
 
 # ── Main window ────────────────────────────────────────────────────────────────
@@ -380,10 +407,24 @@ class Vortex(ctk.CTk):
                 self.after(80, self._tabs["queue"].refresh)
             elif d["status"] == "finished":
                 item.progress = 1.0
+                if d.get("filename"):
+                    item.filepath = d["filename"]
+
+        def pp_hook(d):
+            if d.get("status") == "finished":
+                info = d.get("info_dict", {}) or {}
+                path = (
+                    info.get("filepath")
+                    or info.get("_filename")
+                    or (info.get("requested_downloads") or [{}])[0].get("filepath")
+                )
+                if path:
+                    item.filepath = path
 
         try:
             opts = item.opts.copy()
-            opts["progress_hooks"] = [hook]
+            opts["progress_hooks"]      = [hook]
+            opts["postprocessor_hooks"] = [pp_hook]
             opts.setdefault("quiet", True)
             opts.setdefault("no_warnings", True)
             opts.setdefault("ffmpeg_location",
@@ -488,6 +529,7 @@ class DownloadTab(ctk.CTkFrame):
         self.dir_entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
 
         ghost_btn(dir_row, "...", self._browse_dir, width=36, height=36).grid(row=0, column=1)
+        ghost_btn(dir_row, "↗", self._open_dir, width=36, height=36).grid(row=0, column=2, padx=(8, 0))
 
         # Checkboxes
         cb_row = ctk.CTkFrame(url_card, fg_color="transparent")
@@ -508,20 +550,28 @@ class DownloadTab(ctk.CTkFrame):
         self.playlist_cb.grid(row=0, column=2, padx=(0, 22), sticky="w")
         self.sb_cb.grid(      row=0, column=3,               sticky="w")
 
-        # Extra args
-        extra_row = ctk.CTkFrame(url_card, fg_color="transparent")
-        extra_row.grid(row=3, column=0, padx=22, pady=(0, 10), sticky="ew")
-        extra_row.grid_columnconfigure(1, weight=1)
+        # Extra args toggle
+        extra_toggle_row = ctk.CTkFrame(url_card, fg_color="transparent")
+        extra_toggle_row.grid(row=3, column=0, padx=22, pady=(0, 4), sticky="w")
+        self.extra_show_var = ctk.BooleanVar(value=False)
+        checkbox(extra_toggle_row, "Use extra args", self.extra_show_var,
+                 command=self._toggle_extra_args).pack(anchor="w")
 
-        lbl(extra_row, "Extra args", size=11, weight="bold", color=TEXT_DIM).grid(
+        # Extra args input (hidden by default)
+        self.extra_row = ctk.CTkFrame(url_card, fg_color="transparent")
+        self.extra_row.grid(row=4, column=0, padx=22, pady=(0, 10), sticky="ew")
+        self.extra_row.grid_columnconfigure(1, weight=1)
+
+        lbl(self.extra_row, "Extra args", size=11, weight="bold", color=TEXT_DIM).grid(
             row=0, column=0, padx=(0, 12), sticky="w"
         )
-        self.extra_entry = fancy_entry(extra_row, "--cookies-from-browser firefox", height=36)
+        self.extra_entry = fancy_entry(self.extra_row, "--cookies-from-browser firefox", height=36)
         self.extra_entry.grid(row=0, column=1, sticky="ew")
+        self.extra_row.grid_remove()
 
         # Buttons
         btn_row = ctk.CTkFrame(url_card, fg_color="transparent")
-        btn_row.grid(row=4, column=0, padx=22, pady=(8, 22), sticky="ew")
+        btn_row.grid(row=5, column=0, padx=22, pady=(8, 22), sticky="ew")
 
         accent_btn(btn_row, "  ↓  Download", self._download, width=190, height=54).pack(side="left")
         ghost_btn(btn_row, "Add to Queue", lambda: self._download(to_queue=True), width=148, height=54).pack(
@@ -554,8 +604,23 @@ class DownloadTab(ctk.CTkFrame):
         self.prog_speed = lbl(info_row, "", size=12, color=ACCENT)
         self.prog_speed.grid(row=0, column=1, sticky="e")
 
+        # Make the whole progress card jump to the queue when clicked
+        self._make_clickable(self.prog_card, lambda: self.app._nav("queue"))
+
         # Set initial visibility based on default type
         self._on_type_change(self.type_var.get())
+
+    def _make_clickable(self, widget, command):
+        try:
+            widget.bind("<Button-1>", lambda e: command(), add="+")
+            widget.configure(cursor="hand2")
+        except Exception:
+            pass
+        try:
+            for child in widget.winfo_children():
+                self._make_clickable(child, command)
+        except Exception:
+            pass
 
     # ── Reactivity ────────────────────────────────────────────────────────────
     def _on_type_change(self, value: str):
@@ -583,6 +648,15 @@ class DownloadTab(ctk.CTkFrame):
         if d:
             self.dir_entry.delete(0, "end")
             self.dir_entry.insert(0, d)
+
+    def _open_dir(self):
+        open_path(self.dir_entry.get().strip())
+
+    def _toggle_extra_args(self):
+        if self.extra_show_var.get():
+            self.extra_row.grid()
+        else:
+            self.extra_row.grid_remove()
 
     def _build_opts(self) -> dict:
         dl_dir = self.dir_entry.get().strip() or self.app.settings["download_dir"]
@@ -627,6 +701,16 @@ class DownloadTab(ctk.CTkFrame):
             pp = opts.get("postprocessors", [])
             pp.append({"key": "SponsorBlock", "categories": ["sponsor"]})
             opts["postprocessors"] = pp
+
+        if self.extra_show_var.get():
+            extra = self.extra_entry.get().strip()
+            if extra:
+                try:
+                    import shlex
+                    from yt_dlp import parse_options
+                    opts.update(parse_options(shlex.split(extra)).ydl_opts)
+                except Exception as e:
+                    print(f"Failed to parse extra args: {e}")
 
         return opts
 
@@ -781,12 +865,21 @@ class QueueRow(ctk.CTkFrame):
         )
         self.info_lbl.grid(row=2, column=1, sticky="w", padx=(0, 12), pady=(0, 4))
 
+        self.action_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.action_frame.grid(row=3, column=1, padx=(0, 12), pady=(0, 10), sticky="w")
+
         self.cookie_btn = ghost_btn(
-            self, "↺  Retry with browser cookies", self._retry_with_cookies,
+            self.action_frame, "↺  Retry with browser cookies", self._retry_with_cookies,
             width=220, height=26
         )
-        self.cookie_btn.grid(row=3, column=1, padx=(0, 12), pady=(0, 10), sticky="w")
-        self.cookie_btn.grid_remove()
+        self.open_btn = ghost_btn(
+            self.action_frame, "↗  Open file", self._open_file,
+            width=110, height=26
+        )
+        self.folder_btn = ghost_btn(
+            self.action_frame, "📂  Show in folder", self._show_in_folder,
+            width=150, height=26
+        )
 
         ghost_btn(self, "✕", self._remove, width=28, height=28).grid(
             row=0, column=2, padx=(0, 12), pady=(12, 0), sticky="ne"
@@ -803,25 +896,35 @@ class QueueRow(ctk.CTkFrame):
         self.bar.set(i.progress)
         self.bar.configure(progress_color=bar_c)
 
+        self.cookie_btn.pack_forget()
+        self.open_btn.pack_forget()
+        self.folder_btn.pack_forget()
+
         if i.status == "downloading":
             parts = [f"{i.progress*100:.1f}%"]
             if i.speed: parts.append(fmt_speed(i.speed))
             if i.eta:   parts.append(f"ETA {fmt_eta(i.eta)}")
             self.info_lbl.configure(text="  ".join(parts), text_color=ACCENT)
-            self.cookie_btn.grid_remove()
         elif i.status == "done":
             size = f"  {fmt_bytes(i.total)}" if i.total else ""
             self.info_lbl.configure(text=f"Done{size}", text_color=SUCCESS)
-            self.cookie_btn.grid_remove()
+            if i.filepath:
+                self.open_btn.pack(side="left", padx=(0, 8))
+                self.folder_btn.pack(side="left")
         elif i.status == "error":
             self.info_lbl.configure(text=f"Error: {i.error}", text_color=ERROR)
             if "Sign in to confirm" in i.error or "not a bot" in i.error:
-                self.cookie_btn.grid()
-            else:
-                self.cookie_btn.grid_remove()
+                self.cookie_btn.pack(side="left")
         else:
             self.info_lbl.configure(text=f"Queued · {i.added}", text_color=TEXT_DIM)
-            self.cookie_btn.grid_remove()
+
+    def _open_file(self):
+        if self.item.filepath:
+            open_path(self.item.filepath)
+
+    def _show_in_folder(self):
+        if self.item.filepath:
+            reveal_in_folder(self.item.filepath)
 
     def _retry_with_cookies(self):
         browser = get_default_browser()
