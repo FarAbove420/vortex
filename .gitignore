@@ -20,3 +20,10 @@ env/
 
 # Vortex
 .vortex/
+
+# PyInstaller / packaging outputs
+build/
+dist/
+*.app/
+*.pkg
+*.dmg

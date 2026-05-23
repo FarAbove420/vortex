@@ -19,6 +19,8 @@ from tkinter import filedialog, messagebox
 import threading
 import subprocess
 import json
+import re
+import sys
 from pathlib import Path
 from datetime import datetime
 
@@ -27,6 +29,40 @@ try:
     YT_DLP_OK = True
 except ImportError:
     YT_DLP_OK = False
+
+# On Windows, our own subprocess calls (ffmpeg duration probe, ffmpeg
+# convert) would briefly flash a black cmd window. CREATE_NO_WINDOW hides
+# it. yt-dlp already handles its internal Popen calls this way, but ours
+# need this flag explicitly. No-op on macOS / Linux.
+if sys.platform == "win32":
+    SUBPROCESS_FLAGS = {"creationflags": subprocess.CREATE_NO_WINDOW}
+else:
+    SUBPROCESS_FLAGS = {}
+
+
+# ── ffmpeg locator ────────────────────────────────────────────────────────────
+def find_ffmpeg(configured: str = "") -> str:
+    """Return the best available ffmpeg binary path.
+
+    Preference order:
+      1. User-configured absolute path from Settings (if it exists)
+      2. Static ffmpeg bundled via the imageio-ffmpeg package (works in frozen
+         .app bundles too: PyInstaller includes the binaries folder)
+      3. Bare 'ffmpeg' string, relying on the user's PATH
+    """
+    if configured and configured != "ffmpeg":
+        if Path(configured).exists():
+            return configured
+
+    try:
+        import imageio_ffmpeg
+        bundled = imageio_ffmpeg.get_ffmpeg_exe()
+        if Path(bundled).exists():
+            return bundled
+    except Exception:
+        pass
+
+    return "ffmpeg"
 
 # ── Palette ───────────────────────────────────────────────────────────────────
 BG         = "#0d0d1a"
@@ -317,6 +353,8 @@ class Vortex(ctk.CTk):
             opts["progress_hooks"] = [hook]
             opts.setdefault("quiet", True)
             opts.setdefault("no_warnings", True)
+            opts.setdefault("ffmpeg_location",
+                            find_ffmpeg(self.settings.get("ffmpeg_path", "")))
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(item.url, download=False)
                 if info and item.title == item.url[:60]:
@@ -378,24 +416,34 @@ class DownloadTab(ctk.CTkFrame):
         # Options row
         opts_frame = ctk.CTkFrame(url_card, fg_color="transparent")
         opts_frame.grid(row=1, column=0, padx=22, pady=(0, 14), sticky="ew")
+        opts_frame.grid_columnconfigure(3, weight=1)
 
-        self.type_var  = ctk.StringVar(value="Video + Audio")
+        self.type_var  = ctk.StringVar(value="Audio Only")
         self.qual_var  = ctk.StringVar(value="Best")
         self.afmt_var  = ctk.StringVar(value=self.app.settings.get("default_audio_format", "mp3").upper())
 
-        for label, var, values, width in [
-            ("Type",         self.type_var, ["Video + Audio", "Video Only", "Audio Only"], 148),
-            ("Quality",      self.qual_var, ["Best", "4K", "1440p", "1080p", "720p", "480p", "360p"], 120),
-            ("Audio Format", self.afmt_var, ["MP3", "M4A", "FLAC", "WAV", "OPUS", "AAC"], 110),
-        ]:
-            col = ctk.CTkFrame(opts_frame, fg_color="transparent")
-            col.pack(side="left", padx=(0, 22))
-            lbl(col, label, size=11, weight="bold", color=TEXT_DIM).pack(anchor="w", pady=(0, 5))
-            dropdown(col, values, width=width, variable=var).pack()
+        def opt_col(parent, label_text, var, values, width, on_change=None):
+            c = ctk.CTkFrame(parent, fg_color="transparent")
+            lbl(c, label_text, size=11, weight="bold", color=TEXT_DIM).pack(anchor="w", pady=(0, 5))
+            dropdown(c, values, width=width, variable=var, command=on_change).pack()
+            return c
 
-        # Save-to
+        type_col = opt_col(opts_frame, "Type", self.type_var,
+                           ["Video + Audio", "Video Only", "Audio Only"], 148,
+                           on_change=self._on_type_change)
+        type_col.grid(row=0, column=0, padx=(0, 22), sticky="w")
+
+        self.qual_col = opt_col(opts_frame, "Quality", self.qual_var,
+                                ["Best", "4K", "1440p", "1080p", "720p", "480p", "360p"], 120)
+        self.qual_col.grid(row=0, column=1, padx=(0, 22), sticky="w")
+
+        self.afmt_col = opt_col(opts_frame, "Audio Format", self.afmt_var,
+                                ["MP3", "M4A", "FLAC", "WAV", "OPUS", "AAC"], 110)
+        self.afmt_col.grid(row=0, column=2, padx=(0, 22), sticky="w")
+
+        # Save-to (always visible)
         save_col = ctk.CTkFrame(opts_frame, fg_color="transparent")
-        save_col.pack(side="left", fill="x", expand=True)
+        save_col.grid(row=0, column=3, sticky="ew")
         lbl(save_col, "Save To", size=11, weight="bold", color=TEXT_DIM).pack(anchor="w", pady=(0, 5))
 
         dir_row = ctk.CTkFrame(save_col, fg_color="transparent")
@@ -417,13 +465,15 @@ class DownloadTab(ctk.CTkFrame):
         self.playlist_var = ctk.BooleanVar(value=False)
         self.sb_var       = ctk.BooleanVar(value=False)
 
-        for text, var in [
-            ("Embed subtitles",  self.subs_var),
-            ("Embed thumbnail",  self.thumb_var),
-            ("Download playlist",self.playlist_var),
-            ("SponsorBlock",     self.sb_var),
-        ]:
-            checkbox(cb_row, text, var).pack(side="left", padx=(0, 22))
+        self.subs_cb     = checkbox(cb_row, "Embed subtitles",   self.subs_var)
+        self.thumb_cb    = checkbox(cb_row, "Embed thumbnail",   self.thumb_var)
+        self.playlist_cb = checkbox(cb_row, "Download playlist", self.playlist_var)
+        self.sb_cb       = checkbox(cb_row, "SponsorBlock",      self.sb_var)
+
+        self.subs_cb.grid(    row=0, column=0, padx=(0, 22), sticky="w")
+        self.thumb_cb.grid(   row=0, column=1, padx=(0, 22), sticky="w")
+        self.playlist_cb.grid(row=0, column=2, padx=(0, 22), sticky="w")
+        self.sb_cb.grid(      row=0, column=3,               sticky="w")
 
         # Extra args
         extra_row = ctk.CTkFrame(url_card, fg_color="transparent")
@@ -470,6 +520,21 @@ class DownloadTab(ctk.CTkFrame):
 
         self.prog_speed = lbl(info_row, "", size=12, color=ACCENT)
         self.prog_speed.grid(row=0, column=1, sticky="e")
+
+        # Set initial visibility based on default type
+        self._on_type_change(self.type_var.get())
+
+    # ── Reactivity ────────────────────────────────────────────────────────────
+    def _on_type_change(self, value: str):
+        is_audio = value == "Audio Only"
+        if is_audio:
+            self.qual_col.grid_remove()
+            self.afmt_col.grid()
+            self.subs_cb.grid_remove()
+        else:
+            self.qual_col.grid()
+            self.afmt_col.grid_remove()
+            self.subs_cb.grid()
 
     # ── Actions ───────────────────────────────────────────────────────────────
     def _paste(self):
@@ -767,16 +832,28 @@ class ConvertTab(ctk.CTkFrame):
         self.acodec_var = ctk.StringVar(value="Copy")
         self.crf_var    = ctk.StringVar(value="Auto")
 
-        for label, var, values, width in [
-            ("Format",       self.fmt_var,    ["MP4","MKV","MOV","AVI","WEBM","MP3","M4A","FLAC","WAV"], 100),
-            ("Video Codec",  self.vcodec_var, ["Copy","H.264","H.265","VP9","AV1"],                      120),
-            ("Audio Codec",  self.acodec_var, ["Copy","AAC","MP3","FLAC","Opus"],                        110),
-            ("Quality (CRF)",self.crf_var,    ["Auto","18","20","23","26","28","32"],                     110),
-        ]:
-            col = ctk.CTkFrame(opts, fg_color="transparent")
-            col.pack(side="left", padx=(0, 22))
-            lbl(col, label, size=11, weight="bold", color=TEXT_DIM).pack(anchor="w", pady=(0, 5))
-            dropdown(col, values, width=width, variable=var).pack()
+        def opt_col(parent, label_text, var, values, width, on_change=None):
+            col = ctk.CTkFrame(parent, fg_color="transparent")
+            lbl(col, label_text, size=11, weight="bold", color=TEXT_DIM).pack(anchor="w", pady=(0, 5))
+            dropdown(col, values, width=width, variable=var, command=on_change).pack()
+            return col
+
+        fmt_col = opt_col(opts, "Format", self.fmt_var,
+                          ["MP4","MKV","MOV","AVI","WEBM","MP3","M4A","FLAC","WAV"], 100,
+                          on_change=self._on_fmt_change)
+        fmt_col.grid(row=0, column=0, padx=(0, 22), sticky="w")
+
+        self.vcodec_col = opt_col(opts, "Video Codec", self.vcodec_var,
+                                  ["Copy","H.264","H.265","VP9","AV1"], 120)
+        self.vcodec_col.grid(row=0, column=1, padx=(0, 22), sticky="w")
+
+        acodec_col = opt_col(opts, "Audio Codec", self.acodec_var,
+                             ["Copy","AAC","MP3","FLAC","Opus"], 110)
+        acodec_col.grid(row=0, column=2, padx=(0, 22), sticky="w")
+
+        self.crf_col = opt_col(opts, "Quality (CRF)", self.crf_var,
+                               ["Auto","18","20","23","26","28","32"], 110)
+        self.crf_col.grid(row=0, column=3, padx=(0, 22), sticky="w")
 
         # Trim row
         trim = ctk.CTkFrame(c, fg_color=SURFACE, corner_radius=10)
@@ -816,6 +893,21 @@ class ConvertTab(ctk.CTkFrame):
         self.conv_bar = progress_bar(self.prog_card)
         self.conv_bar.grid(row=1, column=0, padx=22, pady=(0, 18), sticky="ew")
 
+        # Set initial visibility based on default format
+        self._on_fmt_change(self.fmt_var.get())
+
+    # Output formats that are audio-only (no video stream)
+    AUDIO_FORMATS = {"MP3", "M4A", "FLAC", "WAV"}
+
+    def _on_fmt_change(self, value: str):
+        is_audio = value in self.AUDIO_FORMATS
+        if is_audio:
+            self.vcodec_col.grid_remove()
+            self.crf_col.grid_remove()
+        else:
+            self.vcodec_col.grid()
+            self.crf_col.grid()
+
     def _browse_in(self):
         path = filedialog.askopenfilename(
             filetypes=[("Media files", "*.mp4 *.mkv *.mov *.avi *.webm *.mp3 *.m4a *.flac *.wav *.ts *.ogg"), ("All", "*.*")]
@@ -850,7 +942,7 @@ class ConvertTab(ctk.CTkFrame):
         self.after(0, lambda: self.conv_status.configure(text="Starting...", text_color=ACCENT))
         self.after(0, lambda: self.conv_bar.set(0))
 
-        ffmpeg = self.app.settings.get("ffmpeg_path", "ffmpeg")
+        ffmpeg = find_ffmpeg(self.app.settings.get("ffmpeg_path", ""))
         cmd    = [ffmpeg, "-i", inp]
 
         start = self.trim_start.get().strip()
@@ -863,10 +955,16 @@ class ConvertTab(ctk.CTkFrame):
 
         vc = self.vcodec_var.get()
         ac = self.acodec_var.get()
+        is_audio_out = self.fmt_var.get() in self.AUDIO_FORMATS
 
-        cmd += ["-c:v", "copy" if vc == "Copy" else vc_map.get(vc, vc)]
-        if vc != "Copy" and self.crf_var.get() != "Auto":
-            cmd += ["-crf", self.crf_var.get()]
+        if is_audio_out:
+            # Audio-only output: strip video, no codec/CRF flags apply
+            cmd += ["-vn"]
+        else:
+            cmd += ["-c:v", "copy" if vc == "Copy" else vc_map.get(vc, vc)]
+            if vc != "Copy" and self.crf_var.get() != "Auto":
+                cmd += ["-crf", self.crf_var.get()]
+
         cmd += ["-c:a", "copy" if ac == "Copy" else ac_map.get(ac, ac)]
         cmd += ["-progress", "pipe:1", "-y", out]
 
@@ -874,7 +972,8 @@ class ConvertTab(ctk.CTkFrame):
 
         try:
             proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                **SUBPROCESS_FLAGS,
             )
             # Drain stderr on a background thread to prevent buffer deadlock
             stderr_buf: list[str] = []
@@ -910,14 +1009,26 @@ class ConvertTab(ctk.CTkFrame):
             self.after(0, lambda: self.conv_status.configure(text=str(e), text_color=ERROR))
 
     def _probe_duration(self, path: str) -> float:
+        """Get media duration in seconds by parsing ffmpeg's stderr.
+
+        ffmpeg without an output file exits with code 1 ('At least one output
+        file must be specified') but still prints media info to stderr first.
+        That avoids a dependency on a separate ffprobe binary.
+        """
         try:
+            ffmpeg = find_ffmpeg(self.app.settings.get("ffmpeg_path", ""))
             r = subprocess.run(
-                ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", path],
-                capture_output=True, text=True, timeout=10
+                [ffmpeg, "-i", path],
+                capture_output=True, text=True, timeout=10,
+                **SUBPROCESS_FLAGS,
             )
-            return float(json.loads(r.stdout)["format"]["duration"])
+            m = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", r.stderr)
+            if m:
+                h, mn, s = int(m.group(1)), int(m.group(2)), float(m.group(3))
+                return h * 3600 + mn * 60 + s
         except Exception:
-            return 0.0
+            pass
+        return 0.0
 
 
 # ── Settings Tab ──────────────────────────────────────────────────────────────
