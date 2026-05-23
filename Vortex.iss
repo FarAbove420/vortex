@@ -33,8 +33,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked
 
 [Files]
-; Recursively copy everything PyInstaller produced into the install dir.
-Source: "dist\Vortex\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; PyInstaller is configured for one-file mode (see Vortex-win.spec), so the
+; whole app is a single self-contained Vortex.exe at dist\Vortex.exe.
+Source: "dist\Vortex.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}";          Filename: "{app}\{#MyAppExeName}"
