@@ -27,3 +27,8 @@ dist/
 *.app/
 *.pkg
 *.dmg
+
+# Vendored ffmpeg binaries (x86_64 slice for universal2 macOS builds).
+# Extracted from the imageio-ffmpeg PyPI wheel; too large for git.
+# The fetch script in vendor/ stays tracked so the binary is reproducible.
+vendor/ffmpeg-*
