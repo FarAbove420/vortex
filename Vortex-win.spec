@@ -2,8 +2,7 @@
 # PyInstaller spec for Vortex on Windows.
 # Run with: pyinstaller Vortex-win.spec --noconfirm
 #
-# Produces dist/Vortex/Vortex.exe in "one-folder" mode (Vortex.exe alongside
-# its DLLs and resource folder). One-folder is what Inno Setup expects.
+# Produces dist/Vortex.exe in one-file mode (single self-contained executable).
 
 import customtkinter
 import imageio_ffmpeg
@@ -37,8 +36,9 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    [],
-    exclude_binaries=True,
+    a.binaries,
+    a.datas,
+    exclude_binaries=False,
     name='Vortex',
     debug=False,
     bootloader_ignore_signals=False,
@@ -51,14 +51,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=None,                         # add a path to Vortex.ico here later
-)
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=False,
-    upx_exclude=[],
-    name='Vortex',
+    onefile=True,
 )

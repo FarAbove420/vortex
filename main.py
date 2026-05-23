@@ -123,6 +123,39 @@ def fmt_eta(sec: int) -> str:
     if sec < 3600: return f"{sec//60}m {sec%60:02d}s"
     return                f"{sec//3600}h {(sec%3600)//60}m"
 
+def get_default_browser() -> str:
+    if sys.platform == "win32":
+        try:
+            import winreg
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice"
+            )
+            prog_id = winreg.QueryValueEx(key, "ProgId")[0].lower()
+            winreg.CloseKey(key)
+            for name in ("firefox", "chrome", "edge", "brave", "opera", "vivaldi"):
+                if name in prog_id:
+                    return name
+        except Exception:
+            pass
+        return "chrome"
+    elif sys.platform == "darwin":
+        try:
+            import plistlib
+            plist_path = Path.home() / "Library/Preferences/com.apple.LaunchServices/com.apple.launchservices.secure.plist"
+            with open(plist_path, "rb") as f:
+                data = plistlib.load(f)
+            for handler in data.get("LSHandlers", []):
+                if handler.get("LSHandlerURLScheme") in ("https", "http"):
+                    bundle = handler.get("LSHandlerRoleAll", "").lower()
+                    for name in ("firefox", "chrome", "edge", "brave", "opera", "vivaldi", "safari"):
+                        if name in bundle:
+                            return name
+        except Exception:
+            pass
+        return "safari"
+    return "chrome"
+
 # ── Widget helpers ────────────────────────────────────────────────────────────
 def lbl(parent, text, size=13, weight="normal", color=TEXT, **kw):
     return ctk.CTkLabel(
@@ -743,10 +776,17 @@ class QueueRow(ctk.CTkFrame):
         self.bar.grid(row=1, column=1, sticky="ew", padx=(0, 12), pady=(0, 4))
 
         self.info_lbl = ctk.CTkLabel(
-            self, text="", anchor="w",
+            self, text="", anchor="w", wraplength=500,
             font=ctk.CTkFont(size=11), text_color=TEXT_DIM
         )
-        self.info_lbl.grid(row=2, column=1, sticky="w", padx=(0, 12), pady=(0, 12))
+        self.info_lbl.grid(row=2, column=1, sticky="w", padx=(0, 12), pady=(0, 4))
+
+        self.cookie_btn = ghost_btn(
+            self, "↺  Retry with browser cookies", self._retry_with_cookies,
+            width=220, height=26
+        )
+        self.cookie_btn.grid(row=3, column=1, padx=(0, 12), pady=(0, 10), sticky="w")
+        self.cookie_btn.grid_remove()
 
         ghost_btn(self, "✕", self._remove, width=28, height=28).grid(
             row=0, column=2, padx=(0, 12), pady=(12, 0), sticky="ne"
@@ -768,13 +808,33 @@ class QueueRow(ctk.CTkFrame):
             if i.speed: parts.append(fmt_speed(i.speed))
             if i.eta:   parts.append(f"ETA {fmt_eta(i.eta)}")
             self.info_lbl.configure(text="  ".join(parts), text_color=ACCENT)
+            self.cookie_btn.grid_remove()
         elif i.status == "done":
             size = f"  {fmt_bytes(i.total)}" if i.total else ""
             self.info_lbl.configure(text=f"Done{size}", text_color=SUCCESS)
+            self.cookie_btn.grid_remove()
         elif i.status == "error":
-            self.info_lbl.configure(text=f"Error: {i.error[:70]}", text_color=ERROR)
+            self.info_lbl.configure(text=f"Error: {i.error}", text_color=ERROR)
+            if "Sign in to confirm" in i.error or "not a bot" in i.error:
+                self.cookie_btn.grid()
+            else:
+                self.cookie_btn.grid_remove()
         else:
             self.info_lbl.configure(text=f"Queued · {i.added}", text_color=TEXT_DIM)
+            self.cookie_btn.grid_remove()
+
+    def _retry_with_cookies(self):
+        browser = get_default_browser()
+        self.item.opts["cookiesfrombrowser"] = (browser, None, None, None)
+        self.item.status   = "queued"
+        self.item.progress = 0.0
+        self.item.speed    = 0.0
+        self.item.eta      = 0
+        self.item.error    = ""
+        self.update_ui()
+        self.app._tabs["queue"].refresh()
+        if self.app.active is None:
+            self.app._next()
 
     def _remove(self):
         if self.item.status == "downloading":
