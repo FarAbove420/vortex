@@ -51,5 +51,6 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=None,                         # add a path to Vortex.ico here later
+    version='version_info.txt',
     onefile=True,
 )
