@@ -217,7 +217,7 @@ class ConvertTab(ctk.CTkFrame):
         try:
             proc = subprocess.Popen(
                 cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE, text=True, errors="replace",
+                stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
                 **SUBPROCESS_FLAGS,
             )
             # Drain stderr on a background thread to prevent buffer deadlock
@@ -263,13 +263,15 @@ class ConvertTab(ctk.CTkFrame):
 
         ffmpeg without an output file exits with code 1 ('At least one output
         file must be specified') but still prints media info to stderr first.
-        That avoids a dependency on a separate ffprobe binary.
+        That avoids a dependency on a separate ffprobe binary. ffmpeg writes
+        UTF-8; without an explicit encoding Windows decodes it as cp1252 and
+        fails on any accented file name or tag.
         """
         try:
             ffmpeg = find_ffmpeg(self.app.settings.get("ffmpeg_path", ""))
             r = subprocess.run(
                 [ffmpeg, "-i", path],
-                capture_output=True, text=True, timeout=10,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
                 **SUBPROCESS_FLAGS,
             )
             m = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", r.stderr)

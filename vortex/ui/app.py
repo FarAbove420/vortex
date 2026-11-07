@@ -29,11 +29,17 @@ NAV = [
     ("settings", "  ⚙   Settings",  False),
 ]
 
+# Tk 8.6 on Windows can't always draw a symbol in bold once it has been drawn
+# in normal weight: the selected History tab showed a box instead of ⟲. There
+# the selected tab is only coloured, not bold.
+NAV_SELECTED_WEIGHT = "normal" if sys.platform == "win32" else "bold"
+
 
 class Vortex(ctk.CTk):
     def __init__(self):
         self.settings = load_settings()
         ctk.set_widget_scaling(TEXT_SIZES.get(self.settings.get("text_size"), 1.0))
+        self._set_taskbar_id()
         super().__init__()
         self.title("Vortex")
         self.geometry("1240x800")
@@ -57,6 +63,20 @@ class Vortex(ctk.CTk):
         if YT_DLP_OK and self.settings.get("auto_update", True):
             updater.check_in_background(YT_DLP_VERSION, __version__,
                                         lambda *m: self._messages.append(m))
+
+    @staticmethod
+    def _set_taskbar_id():
+        """Run from source, Windows groups the window under python.exe and
+        shows the Python icon in the taskbar. An app ID of our own makes it
+        show the window icon. Vortex.exe already has the Vortex icon and keeps
+        the default ID, so it still groups with its Start menu shortcut."""
+        if sys.platform != "win32" or getattr(sys, "frozen", False):
+            return
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Vortex.FromSource")
+        except Exception as e:
+            log.warning("Could not set the taskbar app ID: %s", e)
 
     def _set_icon(self):
         try:
@@ -140,7 +160,7 @@ class Vortex(ctk.CTk):
         for k, btn in self._nav_btns.items():
             if k == key:
                 btn.configure(fg_color=ACCENT, text_color=WHITE, hover_color=ACCENT_LT,
-                              font=ctk.CTkFont(size=13, weight="bold"))
+                              font=ctk.CTkFont(size=13, weight=NAV_SELECTED_WEIGHT))
             else:
                 btn.configure(fg_color="transparent", text_color=TEXT_DIM,
                               hover_color=CARD_HOVER, font=ctk.CTkFont(size=13))

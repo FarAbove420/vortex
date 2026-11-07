@@ -3,6 +3,7 @@ import base64
 import re
 import shlex
 import subprocess
+import sys
 import urllib.request
 from datetime import datetime
 from pathlib import Path
@@ -87,8 +88,22 @@ def cli_to_opts(args: list[str]) -> dict:
     return diff
 
 
+def split_args(text: str) -> list[str]:
+    """Split typed yt-dlp flags like a shell does, quotes included.
+
+    On Windows a backslash is a path separator, not an escape character, so
+    C:\\Music\\archive.txt stays as typed instead of becoming C:Musicarchive.txt.
+    """
+    lex = shlex.shlex(text, posix=True)
+    lex.whitespace_split = True
+    lex.commenters = ""
+    if sys.platform == "win32":
+        lex.escape = ""
+    return list(lex)
+
+
 def extra_args_to_opts(text: str) -> dict:
-    return cli_to_opts(shlex.split(text))
+    return cli_to_opts(split_args(text))
 
 
 def download_args(*, kind: str, quality: str = "Best", audio_format: str = "mp3",
@@ -115,7 +130,7 @@ def download_args(*, kind: str, quality: str = "Best", audio_format: str = "mp3"
     if sponsorblock:
         args += ["--sponsorblock-remove", "sponsor"]
     if extra.strip():
-        args += shlex.split(extra)
+        args += split_args(extra)
     return args
 
 

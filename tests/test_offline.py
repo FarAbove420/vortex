@@ -1,11 +1,12 @@
 """Fast tests, no network."""
+import sys
 from pathlib import Path
 
 import pytest
 
 from vortex import history, updater
 from vortex.media import (build_format, cli_to_opts, download_args, extra_args_to_opts,
-                          final_exts, unique_template, looks_like_url)
+                          final_exts, unique_template, looks_like_url, split_args)
 from vortex.ytdl import yt_dlp
 
 
@@ -17,6 +18,17 @@ def pp_keys(opts):
 def test_extra_args_only_returns_what_was_given():
     assert extra_args_to_opts("--cookies-from-browser firefox") == {
         "cookiesfrombrowser": ("firefox", None, None, None)}
+
+
+def test_extra_args_keep_windows_paths(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    assert split_args(r'--download-archive C:\Music\archive.txt --cookies "C:\My Files\c.txt"') == [
+        "--download-archive", r"C:\Music\archive.txt", "--cookies", r"C:\My Files\c.txt"]
+
+
+def test_extra_args_backslash_escapes_elsewhere(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    assert split_args(r"-o My\ Song.%(ext)s") == ["-o", "My Song.%(ext)s"]
 
 
 def test_bad_flag_raises_valueerror():

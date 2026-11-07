@@ -34,7 +34,7 @@ def test_song_has_cover_art(tmp_path):
     item = song_item(tmp_path)
     run_download(item)
     probe = subprocess.run([find_ffmpeg(), "-hide_banner", "-i", item.filepath],
-                           capture_output=True, text=True).stderr
+                           capture_output=True, text=True, encoding="utf-8", errors="replace").stderr
     assert "attached pic" in probe
 
 
