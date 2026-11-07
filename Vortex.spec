@@ -5,6 +5,7 @@ import re
 import customtkinter
 import imageio_ffmpeg
 from pathlib import Path
+from PyInstaller.utils.hooks import copy_metadata
 
 # Single source for the version number: __version__ in main.py
 VERSION = re.search(r'__version__ = "([^"]+)"',
@@ -26,7 +27,9 @@ a = Analysis(
         (str(IMAGEIO_FFMPEG_BIN_DIR), 'imageio_ffmpeg/binaries'),
         (str(VENDOR_FFMPEG_X86_64), 'imageio_ffmpeg/binaries'),
         ('assets/icon.png', 'assets'),
-    ],
+    # yt-dlp's version metadata: updater.py reads it to compare with
+    # the downloaded yt-dlp without importing the built-in one
+    ] + copy_metadata('yt-dlp'),
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

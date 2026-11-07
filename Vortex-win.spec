@@ -7,6 +7,7 @@
 import customtkinter
 import imageio_ffmpeg
 from pathlib import Path
+from PyInstaller.utils.hooks import copy_metadata
 
 CTK_PATH               = Path(customtkinter.__file__).parent
 IMAGEIO_FFMPEG_BIN_DIR = Path(imageio_ffmpeg.__file__).parent / 'binaries'
@@ -24,7 +25,9 @@ a = Analysis(
         (str(IMAGEIO_FFMPEG_BIN_DIR), 'imageio_ffmpeg/binaries'),
         # Window icon (the .exe icon itself is set below)
         ('assets/Vortex.ico', 'assets'),
-    ],
+    # yt-dlp's version metadata: updater.py reads it to compare with
+    # the downloaded yt-dlp without importing the built-in one
+    ] + copy_metadata('yt-dlp'),
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

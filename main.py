@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Vortex - yt-dlp + ffmpeg desktop UI"""
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 # ── SSL fix (must run before any HTTPS-using module is imported) ──────────────
 # python.org's Python on macOS ships without a certificate store, so HTTPS
@@ -29,11 +29,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import datetime
 
-try:
-    import yt_dlp
-    YT_DLP_OK = True
-except ImportError:
-    YT_DLP_OK = False
+import updater
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 # The packaged app has no console, so print() output is lost. Everything worth
@@ -45,6 +41,8 @@ log = logging.getLogger("vortex")
 
 
 def setup_logging():
+    if log.handlers:
+        return
     log.setLevel(logging.INFO)
     try:
         APP_DIR.mkdir(parents=True, exist_ok=True)
@@ -53,6 +51,17 @@ def setup_logging():
         log.addHandler(handler)
     except OSError:
         log.addHandler(logging.NullHandler())
+
+
+setup_logging()
+
+# yt-dlp: the built-in copy, or a newer one the updater downloaded earlier
+try:
+    yt_dlp = updater.load_ytdlp()
+    YT_DLP_OK = True
+except ImportError:
+    yt_dlp = None
+    YT_DLP_OK = False
 
 
 class YtdlpLogger:
@@ -128,6 +137,7 @@ DEFAULTS = {
     "ffmpeg_path":          "ffmpeg",
     "embed_subs":           False,
     "embed_thumbnail":      False,
+    "auto_update":          True,
 }
 
 def load_settings() -> dict:
@@ -361,9 +371,14 @@ class Vortex(ctk.CTk):
         self.queue: list[Item] = []
         self.active: Item | None = None
 
+        self._messages: list[str] = []   # from the updater thread, shown by _tick
+
         self._build()
         self._nav("download")
         self._tick()
+
+        if YT_DLP_OK and self.settings.get("auto_update", True):
+            updater.check_in_background(yt_dlp.version.__version__, self._messages.append)
 
     def _set_icon(self):
         try:
@@ -430,7 +445,16 @@ class Vortex(ctk.CTk):
             sb, text="● Ready",
             font=ctk.CTkFont(size=11), text_color=SUCCESS
         )
-        self._status_lbl.grid(row=6, column=0, padx=20, pady=(0, 18), sticky="w")
+        self._status_lbl.grid(row=6, column=0, padx=20, pady=(0, 4), sticky="w")
+
+        # Versions, so it's always clear which build is running. The updater
+        # also posts its messages here.
+        ytv = yt_dlp.version.__version__ if YT_DLP_OK else "missing"
+        self._version_lbl = ctk.CTkLabel(
+            sb, text=f"Vortex {__version__}\nyt-dlp {ytv}", justify="left", anchor="w",
+            wraplength=190, font=ctk.CTkFont(size=10), text_color=TEXT_DIM
+        )
+        self._version_lbl.grid(row=7, column=0, padx=20, pady=(0, 18), sticky="w")
 
     def _content(self):
         cf = ctk.CTkFrame(self, fg_color=BG, corner_radius=0)
@@ -481,6 +505,10 @@ class Vortex(ctk.CTk):
                 self._next()
             else:
                 self._tabs["queue"].refresh()
+        while self._messages:
+            msg = self._messages.pop(0)
+            self._version_lbl.configure(
+                text=f"Vortex {__version__}\n{msg}", text_color=ACCENT_LT)
         self.after(250, self._tick)
 
     def _next(self):
@@ -535,6 +563,9 @@ class Vortex(ctk.CTk):
             opts.setdefault("noprogress", True)
             opts.setdefault("ffmpeg_location",
                             find_ffmpeg(self.settings.get("ffmpeg_path", "")))
+            deno = updater.deno_path()
+            if deno:
+                opts.setdefault("js_runtimes", {"deno": {"path": str(deno)}})
             log.info("Download started: %s", item.url)
             with yt_dlp.YoutubeDL(opts) as ydl:
                 # One call: fetches the video info and downloads it.
@@ -1408,6 +1439,7 @@ class SettingsTab(ctk.CTkFrame):
         for key, label_text in [
             ("embed_subs",      "Embed subtitles by default"),
             ("embed_thumbnail", "Embed thumbnail by default"),
+            ("auto_update",     "Keep yt-dlp and Deno up to date"),
         ]:
             var = ctk.BooleanVar(value=bool(self.app.settings.get(key, False)))
             self._checks[key] = var
@@ -1439,8 +1471,8 @@ class SettingsTab(ctk.CTkFrame):
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    setup_logging()
-    log.info("Vortex %s starting (yt-dlp %s)", __version__,
-             yt_dlp.version.__version__ if YT_DLP_OK else "missing")
+    log.info("Vortex %s starting (yt-dlp %s from %s)", __version__,
+             yt_dlp.version.__version__ if YT_DLP_OK else "missing",
+             yt_dlp.__file__ if YT_DLP_OK else "-")
     app = Vortex()
     app.mainloop()

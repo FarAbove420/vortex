@@ -37,21 +37,29 @@ pip install -r requirements.txt
 python main.py
 ```
 
-### YouTube needs Deno
+## Automatic updates for yt-dlp and Deno
 
-Since yt-dlp 2025.11.12, YouTube downloads need a JavaScript runtime. Without
-one, fewer formats are available and some downloads fail
+YouTube changes often, and older yt-dlp versions stop working. Since yt-dlp
+2025.11.12, YouTube downloads also need a JavaScript runtime such as Deno
 ([yt-dlp announcement](https://github.com/yt-dlp/yt-dlp/issues/15012)).
-Install [Deno](https://deno.com); yt-dlp finds it automatically.
+Vortex takes care of both, so nobody has to reinstall the app when YouTube
+breaks something:
 
-### Keep yt-dlp up to date
+- When Vortex starts, it checks GitHub for a newer
+  [yt-dlp release](https://github.com/yt-dlp/yt-dlp/releases) (at most every
+  6 hours). A newer one is downloaded to `~/.vortex/yt-dlp/`, checked against
+  the release's `SHA2-256SUMS`, and used from the next start.
+- It downloads [Deno](https://github.com/denoland/deno/releases) to
+  `~/.vortex/bin/`, checked against its `.sha256sum` file, and checks for a
+  newer Deno once a week.
+- If a downloaded yt-dlp doesn't load, Vortex falls back to the copy built into
+  the app and skips that version.
+- The sidebar shows the Vortex and yt-dlp versions, and update messages.
 
-YouTube changes often and older yt-dlp versions stop working. If downloads
-start failing, update first:
-
-```bash
-pip install -U "yt-dlp[default]"
-```
+This means Vortex contacts `api.github.com` and `github.com` when it starts.
+You can turn it off in Settings with "Keep yt-dlp and Deno up to date".
+When running from source with updates off, update yt-dlp yourself with
+`pip install -U "yt-dlp[default]"`.
 
 ## Building the app
 
@@ -85,7 +93,7 @@ The version number lives in three places. Update all of them:
 
 ## Where Vortex keeps its files
 
-Settings and a log file are stored in `~/.vortex/` (on Windows
+Settings, a log file, the downloaded yt-dlp and Deno are stored in `~/.vortex/` (on Windows
 `%USERPROFILE%\.vortex\`). If something goes wrong, `vortex.log` usually says
 why.
 

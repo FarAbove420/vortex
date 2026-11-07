@@ -10,6 +10,7 @@ under its own license.
 | [yt-dlp-ejs](https://github.com/yt-dlp/ejs) | Helps yt-dlp with YouTube's JavaScript challenges | Unlicense AND MIT AND ISC | https://github.com/yt-dlp/ejs |
 | [FFmpeg](https://ffmpeg.org) | Merges, converts and trims media | GPL (see below) | https://ffmpeg.org/download.html |
 | [imageio-ffmpeg](https://github.com/imageio/imageio-ffmpeg) | Provides the FFmpeg binaries | BSD-2-Clause | https://github.com/imageio/imageio-ffmpeg |
+| [Deno](https://deno.com) | JavaScript runtime yt-dlp uses for YouTube. Not bundled: downloaded on first start | MIT | https://github.com/denoland/deno |
 | [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) | User interface | MIT | https://github.com/TomSchimansky/CustomTkinter |
 | [certifi](https://github.com/certifi/python-certifi) | HTTPS certificate list | MPL-2.0 | https://github.com/certifi/python-certifi |
 | [Python](https://www.python.org) and Tcl/Tk | Runtime, bundled by PyInstaller | PSF License, Tcl/Tk license | https://www.python.org/downloads/source/ |
