@@ -1,0 +1,90 @@
+name: Build and release
+
+# Push a tag like v0.3.0 to build Windows and macOS and publish a GitHub
+# Release. "Run workflow" on the Actions tab builds without publishing.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: "3.14"
+  # python.org installer: universal2 (Intel + Apple Silicon), needed for
+  # Vortex.spec's universal2 build
+  MAC_PYTHON_PKG: https://www.python.org/ftp/python/3.14.10/python-3.14.10-macos11.pkg
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install -r requirements.txt pytest pyflakes
+      - run: python -m pyflakes main.py vortex tests
+      - run: python -m pytest -q
+      - name: Tag matches the version in the code
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          code=$(python -c "import re;print(re.search(r'__version__ = \"(.+)\"', open('vortex/__init__.py').read()).group(1))")
+          [ "v$code" = "${GITHUB_REF_NAME}" ] || { echo "Tag ${GITHUB_REF_NAME} but vortex/__init__.py says $code"; exit 1; }
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install -r requirements-build.txt
+      - run: choco install innosetup -y --no-progress
+      - name: Build Vortex.exe and Vortex-Setup.exe
+        shell: cmd
+        run: build-win.bat
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/Vortex-Setup.exe
+
+  macos:
+    needs: test
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install universal2 Python from python.org
+        run: |
+          curl -fsSL -o python.pkg "$MAC_PYTHON_PKG"
+          sudo installer -pkg python.pkg -target /
+          echo "/Library/Frameworks/Python.framework/Versions/${PYTHON_VERSION}/bin" >> "$GITHUB_PATH"
+      - run: python3 -m venv .venv && .venv/bin/pip install -r requirements-build.txt
+      - run: ./vendor/fetch-x86_64-ffmpeg.sh
+      - run: .venv/bin/pyinstaller Vortex.spec --noconfirm
+      - name: Check both architectures are in the app
+        run: lipo -archs dist/Vortex.app/Contents/MacOS/Vortex | grep -q "x86_64 arm64"
+      - run: ditto -c -k --keepParent dist/Vortex.app dist/Vortex-macOS.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/Vortex-macOS.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=$(awk -v v="## ${GITHUB_REF_NAME#v}" '$0==v{f=1;next} /^## /{f=0} f' CHANGELOG.md)
+          gh release create "$GITHUB_REF_NAME" out/windows/Vortex-Setup.exe out/macos/Vortex-macOS.zip \
+            --title "Vortex ${GITHUB_REF_NAME#v}" --notes "${notes:-See CHANGELOG.md}"

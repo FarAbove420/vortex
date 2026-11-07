@@ -1,0 +1,4 @@
+-r requirements-build.txt
+pytest
+pyflakes
+pillow        # only for assets/make_icon.py

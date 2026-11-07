@@ -7,9 +7,9 @@ import imageio_ffmpeg
 from pathlib import Path
 from PyInstaller.utils.hooks import copy_metadata
 
-# Single source for the version number: __version__ in main.py
+# Single source for the version number: __version__ in vortex/__init__.py
 VERSION = re.search(r'__version__ = "([^"]+)"',
-                    (Path(SPECPATH) / 'main.py').read_text()).group(1)
+                    (Path(SPECPATH) / 'vortex' / '__init__.py').read_text()).group(1)
 
 CTK_PATH      = Path(customtkinter.__file__).parent
 IMAGEIO_FFMPEG_BIN_DIR = Path(imageio_ffmpeg.__file__).parent / 'binaries'

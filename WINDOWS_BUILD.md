@@ -94,7 +94,7 @@ you can switch to a system-wide install (Program Files) on the
 
 ## Updating
 
-When `main.py` or any dependency changes:
+When the code or any dependency changes:
 
 ```
 git pull
