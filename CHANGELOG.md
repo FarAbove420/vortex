@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.1
 
 - Convert is back in the sidebar; only the Advanced download tab is hidden
   by default, with a tip on Home pointing to the setting
