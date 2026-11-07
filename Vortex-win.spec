@@ -25,6 +25,7 @@ a = Analysis(
         (str(IMAGEIO_FFMPEG_BIN_DIR), 'imageio_ffmpeg/binaries'),
         # Window icon (the .exe icon itself is set below)
         ('assets/Vortex.ico', 'assets'),
+        ('assets/logo-40.png', 'assets'),
     # yt-dlp's version metadata: updater.py reads it to compare with
     # the downloaded yt-dlp without importing the built-in one
     ] + copy_metadata('yt-dlp'),

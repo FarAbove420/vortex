@@ -11,7 +11,7 @@ from ..media import (Item, cli_to_opts, download_args, final_exts, fetch_preview
                      looks_like_url, best_thumbnail_url, thumbnail_png_b64)
 from ..system import fmt_duration, open_path, reveal_in_folder
 from ..ytdl import YT_DLP_OK
-from .theme import (BG, CARD, CARD_HOVER, ACCENT_DK, TEXT, TEXT_DIM, ERROR, lbl, card, fancy_entry, ghost_btn, accent_btn, progress_bar)
+from .theme import (BG, CARD, CARD_HOVER, ACCENT_DK, TEXT, TEXT_DIM, ERROR, lbl, card, fancy_entry, ghost_btn, accent_btn, progress_bar, hide)
 from .progress import status_text
 
 
@@ -54,7 +54,7 @@ class HomeTab(ctk.CTkFrame):
         self.results = card(self)
         self.results.grid(row=3, column=0, padx=32, pady=(12, 0), sticky="ew")
         self.results.grid_columnconfigure(0, weight=1)
-        self.results.grid_remove()
+        hide(self.results)
 
         # Preview with the two big buttons (hidden until something is found)
         self.card = card(self)
@@ -74,7 +74,7 @@ class HomeTab(ctk.CTkFrame):
         self.video_btn = accent_btn(btns, "▶  Video", lambda: self._download("video"), width=190, height=58)
         self.video_btn.configure(font=ctk.CTkFont(size=16, weight="bold"), fg_color=ACCENT_DK)
         self.video_btn.pack(side="left", padx=(14, 0))
-        self.card.grid_remove()
+        hide(self.card)
 
         # Progress of the last download started here
         self.prog = card(self)
@@ -90,7 +90,7 @@ class HomeTab(ctk.CTkFrame):
         acts.grid(row=3, column=0, sticky="w", padx=22, pady=(0, 16))
         self.open_btn = ghost_btn(acts, "↗  Play / open", self._open, width=140, height=34)
         self.folder_btn = ghost_btn(acts, "📂  Show in folder", self._reveal, width=160, height=34)
-        self.prog.grid_remove()
+        hide(self.prog)
         self.refresh_labels()
 
     def refresh_labels(self):
@@ -157,8 +157,8 @@ class HomeTab(ctk.CTkFrame):
         text = self.entry.get().strip()
         if not text:
             return
-        self.results.grid_remove()
-        self.card.grid_remove()
+        hide(self.results)
+        hide(self.card)
         if looks_like_url(text):
             self._lookup(text)
         else:
@@ -185,8 +185,8 @@ class HomeTab(ctk.CTkFrame):
         self.results.grid()
 
     def _lookup(self, url: str):
-        self.results.grid_remove()
-        self.card.grid_remove()
+        hide(self.results)
+        hide(self.card)
         self.hint.configure(text="Looking it up...", text_color=TEXT_DIM)
         ffmpeg_path = self.app.settings.get("ffmpeg_path", "")
 
@@ -211,7 +211,7 @@ class HomeTab(ctk.CTkFrame):
             self.thumb.configure(image=self._thumb_img)
             self.thumb.grid()
         else:
-            self.thumb.grid_remove()
+            hide(self.thumb)
         if info.get("_type") == "playlist":
             n = info.get("playlist_count") or len(info.get("entries") or [])
             self.title_lbl.configure(text=info.get("title") or "Playlist")

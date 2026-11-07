@@ -122,6 +122,7 @@ class SettingsTab(ctk.CTkFrame):
         s["download_dir"] = self.dir_entry.get().strip() or s["download_dir"]
         s["default_audio_format"] = self.afmt_var.get().lower()
         s["ffmpeg_path"] = self.ffmpeg_entry.get().strip() or "ffmpeg"
+        size_changed = s.get("text_size") != self.size_var.get()
         s["text_size"] = self.size_var.get()
         for key, var in self._checks.items():
             s[key] = var.get()
@@ -129,6 +130,8 @@ class SettingsTab(ctk.CTkFrame):
         if bool(updater.read_state().get("use_builtin")) != self.builtin_var.get():
             updater.set_use_builtin(self.builtin_var.get())
             self.saved_lbl.configure(text="✓ Saved. Restart Vortex to switch yt-dlp")
+        elif size_changed:
+            self.saved_lbl.configure(text="✓ Saved. Restart Vortex to change the text size")
         else:
             self.saved_lbl.configure(text="✓ Saved")
         self.app.apply_settings()

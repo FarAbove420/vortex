@@ -27,6 +27,7 @@ a = Analysis(
         (str(IMAGEIO_FFMPEG_BIN_DIR), 'imageio_ffmpeg/binaries'),
         (str(VENDOR_FFMPEG_X86_64), 'imageio_ffmpeg/binaries'),
         ('assets/icon.png', 'assets'),
+        ('assets/logo-40.png', 'assets'),
     # yt-dlp's version metadata: updater.py reads it to compare with
     # the downloaded yt-dlp without importing the built-in one
     ] + copy_metadata('yt-dlp'),

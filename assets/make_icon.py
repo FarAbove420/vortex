@@ -7,6 +7,7 @@ Writes, next to this script:
   icon.png     1024 px, macOS icon grid (used for the window icon)
   Vortex.icns  macOS app icon (needs macOS: uses iconutil)
   Vortex.ico   Windows app and installer icon
+  logo-40.png  sidebar logo
 """
 import math
 import shutil
@@ -139,6 +140,9 @@ def main():
     # Windows: icons fill nearly the whole square
     win = draw(24 / 1024, 200 / 1024)
     win.save(HERE / "Vortex.ico", sizes=[(s, s) for s in (16, 24, 32, 48, 64, 128, 256)])
+
+    # Small logo for the sidebar (Tk can show PNG without Pillow)
+    win.resize((40, 40), Image.LANCZOS).save(HERE / "logo-40.png")
 
     if sys.platform == "darwin" and shutil.which("iconutil"):
         with tempfile.TemporaryDirectory() as tmp:

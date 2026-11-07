@@ -3,7 +3,7 @@ import customtkinter as ctk
 
 from ..media import Item
 from ..system import open_path, reveal_in_folder
-from .theme import (BG, SURFACE, CARD, CARD_HOVER, ACCENT, TEXT, TEXT_DIM, TEXT_HINT, SUCCESS, ERROR, BORDER, lbl, ghost_btn)
+from .theme import (BG, SURFACE, CARD, CARD_HOVER, ACCENT, TEXT, TEXT_DIM, TEXT_HINT, SUCCESS, ERROR, BORDER, lbl, ghost_btn, hide)
 from .progress import status_text
 
 # ── Queue Tab ─────────────────────────────────────────────────────────────────
@@ -52,7 +52,7 @@ class QueueTab(ctk.CTkFrame):
         if not q:
             self.empty_lbl.grid()
         else:
-            self.empty_lbl.grid_remove()
+            hide(self.empty_lbl)
 
         current = set(q)
         for item in list(self._widgets):

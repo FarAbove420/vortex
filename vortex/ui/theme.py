@@ -94,3 +94,17 @@ def checkbox(parent, text, variable, **kw):
         checkmark_color=WHITE, border_color=BORDER, **kw
     )
 
+
+
+def hide(widget):
+    """grid_remove() that stays hidden.
+
+    CustomTkinter remembers each widget's last grid() call and repeats it
+    whenever the scaling changes (text size, or on Windows moving the window
+    to a screen with different scaling). grid_remove() doesn't clear that, so
+    hidden widgets would pop back up. Clearing it keeps them hidden; a later
+    widget.grid() still restores the old position.
+    """
+    widget.grid_remove()
+    if hasattr(widget, "_last_geometry_manager_call"):
+        widget._last_geometry_manager_call = None

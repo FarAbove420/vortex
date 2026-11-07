@@ -9,7 +9,7 @@ import customtkinter as ctk
 
 from ..config import log, SUBPROCESS_FLAGS
 from ..media import find_ffmpeg
-from .theme import (BG, SURFACE, CARD, ACCENT, TEXT, TEXT_DIM, SUCCESS, ERROR, BORDER, lbl, card, fancy_entry, dropdown, ghost_btn, accent_btn, progress_bar)
+from .theme import (BG, SURFACE, CARD, ACCENT, TEXT, TEXT_DIM, SUCCESS, ERROR, BORDER, lbl, card, fancy_entry, dropdown, ghost_btn, accent_btn, progress_bar, hide)
 
 # ── Convert Tab ───────────────────────────────────────────────────────────────
 class ConvertTab(ctk.CTkFrame):
@@ -132,9 +132,9 @@ class ConvertTab(ctk.CTkFrame):
     def _on_fmt_change(self, value: str):
         is_audio = value in self.AUDIO_FORMATS
         if is_audio:
-            self.vcodec_col.grid_remove()
-            self.crf_col.grid_remove()
-            self.acodec_col.grid_remove()
+            hide(self.vcodec_col)
+            hide(self.crf_col)
+            hide(self.acodec_col)
         else:
             self.vcodec_col.grid()
             self.crf_col.grid()

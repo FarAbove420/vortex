@@ -7,7 +7,7 @@ import customtkinter as ctk
 from ..media import Item, AUDIO_FORMATS, cli_to_opts, download_args, final_exts
 from ..ytdl import YT_DLP_OK
 from ..system import open_path
-from .theme import (BG, ACCENT, TEXT_DIM, lbl, card, fancy_entry, dropdown, ghost_btn, accent_btn, progress_bar, checkbox)
+from .theme import (BG, ACCENT, TEXT_DIM, lbl, card, fancy_entry, dropdown, ghost_btn, accent_btn, progress_bar, checkbox, hide)
 from .progress import status_text
 
 # ── Download Tab ──────────────────────────────────────────────────────────────
@@ -135,7 +135,7 @@ class DownloadTab(ctk.CTkFrame):
         )
         self.extra_entry = fancy_entry(self.extra_row, "--cookies-from-browser firefox", height=36)
         self.extra_entry.grid(row=0, column=1, sticky="ew")
-        self.extra_row.grid_remove()
+        hide(self.extra_row)
 
         # Buttons
         btn_row = ctk.CTkFrame(url_card, fg_color="transparent")
@@ -194,13 +194,13 @@ class DownloadTab(ctk.CTkFrame):
     def _on_type_change(self, value: str):
         is_audio = value == "Audio Only"
         if is_audio:
-            self.qual_col.grid_remove()
+            hide(self.qual_col)
             self.afmt_col.grid()
-            self.subs_cb.grid_remove()
-            self.mp4_cb.grid_remove()
+            hide(self.subs_cb)
+            hide(self.mp4_cb)
         else:
             self.qual_col.grid()
-            self.afmt_col.grid_remove()
+            hide(self.afmt_col)
             self.subs_cb.grid()
             self.mp4_cb.grid()
 
@@ -226,7 +226,7 @@ class DownloadTab(ctk.CTkFrame):
         if self.extra_show_var.get():
             self.extra_row.grid()
         else:
-            self.extra_row.grid_remove()
+            hide(self.extra_row)
 
     def apply_settings(self):
         """Pick up changes saved on the Settings tab."""

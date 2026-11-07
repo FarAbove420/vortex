@@ -11,13 +11,14 @@ from ..config import load_settings, log, resource_path, TEXT_SIZES
 from ..media import Item, run_download
 from ..system import notify, open_url, cookie_browser, acquire_single_instance
 from ..ytdl import YT_DLP_OK, YT_DLP_VERSION
-from .theme import (BG, SURFACE, CARD_HOVER, ACCENT, ACCENT_LT, TEXT, TEXT_DIM, SUCCESS, WARNING, BORDER, WHITE)
+from .theme import (BG, SURFACE, CARD_HOVER, ACCENT, ACCENT_LT, TEXT, TEXT_DIM, SUCCESS, WARNING, BORDER, WHITE, hide)
 from .home_tab import HomeTab
 from .queue_tab import QueueTab
 from .history_tab import HistoryTab
 from .download_tab import DownloadTab
 from .convert_tab import ConvertTab
 from .settings_tab import SettingsTab
+from . import scrolling
 
 NAV = [
     ("home",     "  ⌂   Home",      False),
@@ -74,6 +75,7 @@ class Vortex(ctk.CTk):
         self.grid_rowconfigure(0, weight=1)
         self._sidebar()
         self._content()
+        scrolling.install(self)   # after all tabs exist: replaces their wheel handler
 
     def _sidebar(self):
         sb = ctk.CTkFrame(self, width=230, corner_radius=0, fg_color=SURFACE)
@@ -85,8 +87,17 @@ class Vortex(ctk.CTk):
         logo_wrap = ctk.CTkFrame(sb, fg_color="transparent", height=88)
         logo_wrap.grid(row=0, column=0, sticky="ew")
         logo_wrap.grid_propagate(False)
-        ctk.CTkLabel(logo_wrap, text="⚡ Vortex", font=ctk.CTkFont(size=26, weight="bold"),
-                     text_color=TEXT).place(relx=0.5, rely=0.56, anchor="center")
+        logo = ctk.CTkFrame(logo_wrap, fg_color="transparent")
+        logo.place(relx=0.5, rely=0.56, anchor="center")
+        try:
+            # Plain Tk image: CustomTkinter's CTkImage needs Pillow, which the
+            # app doesn't bundle. Made by assets/make_icon.py.
+            self._logo_img = tk.PhotoImage(file=str(resource_path("assets/logo-40.png")))
+            tk.Label(logo, image=self._logo_img, bg=SURFACE, bd=0).pack(side="left", padx=(0, 10))
+        except Exception as e:
+            log.warning("Could not load logo: %s", e)
+        ctk.CTkLabel(logo, text="Vortex", font=ctk.CTkFont(size=26, weight="bold"),
+                     text_color=TEXT).pack(side="left")
         ctk.CTkFrame(sb, height=1, fg_color=BORDER).grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 10))
 
         self._nav_btns: dict[str, ctk.CTkButton] = {}
@@ -138,12 +149,14 @@ class Vortex(ctk.CTk):
         self._tabs[key].tkraise()
 
     def apply_settings(self):
-        """Apply saved settings everywhere (called at start and after Save)."""
-        ctk.set_widget_scaling(TEXT_SIZES.get(self.settings.get("text_size"), 1.0))
+        """Apply saved settings everywhere (called at start and after Save).
+
+        Text size is only applied at startup: changing CustomTkinter's scaling
+        while the window is open re-lays out every widget."""
         show_adv = bool(self.settings.get("show_advanced"))
         for i, (key, _label, advanced) in enumerate(NAV):
             if advanced and not show_adv:
-                self._nav_btns[key].grid_remove()
+                hide(self._nav_btns[key])
             else:
                 self._nav_btns[key].grid()
         self._tabs["download"].apply_settings()
