@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.2
+
+Windows fixes:
+
+- Convert shows progress for files with accented names or tags (most
+  songs); the bar used to jump straight from 0 to 100%
+- Paths in the Advanced tab's extra args keep their backslashes, so
+  `C:\Music\archive.txt` works
+- The History icon in the sidebar no longer turns into a box when selected
+- Running from source shows the Vortex icon in the taskbar instead of
+  Python's
+
 ## 0.3.1
 
 - Convert is back in the sidebar; only the Advanced download tab is hidden
