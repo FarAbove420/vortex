@@ -53,7 +53,7 @@ jobs:
 
   macos:
     needs: test
-    runs-on: macos-14
+    runs-on: macos-latest   # arm64; the universal2 Python builds both architectures
     steps:
       - uses: actions/checkout@v4
       - name: Install universal2 Python from python.org
