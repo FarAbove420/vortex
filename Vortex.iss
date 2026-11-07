@@ -30,6 +30,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 UninstallDisplayIcon={app}\{#MyAppExeName}
+SetupIconFile=assets\Vortex.ico
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

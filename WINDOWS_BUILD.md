@@ -10,7 +10,7 @@ just `build-win.bat`.
 
 ### 1. Install Python
 
-Download Python 3.11 or newer from <https://www.python.org/downloads/windows/>.
+Download Python 3.10 or newer from <https://www.python.org/downloads/windows/>.
 Run the installer and **tick the "Add python.exe to PATH" checkbox** on the
 first screen. Default settings otherwise.
 
@@ -38,11 +38,11 @@ If you don't have `git`, install it from <https://git-scm.com/download/win>.
 From inside the `vortex` folder:
 
 ```
-pip install -r requirements.txt
-pip install pyinstaller
+pip install -r requirements-build.txt
 ```
 
-This installs CustomTkinter, yt-dlp, certifi, imageio-ffmpeg, and PyInstaller.
+This installs CustomTkinter, yt-dlp (with its optional extras), certifi,
+imageio-ffmpeg, and PyInstaller.
 
 ### 4. Install Inno Setup
 
@@ -65,15 +65,15 @@ build-win.bat
 
 The script runs three steps:
 
-1. Cleans `build\` and previous `dist\Vortex\`
-2. Runs PyInstaller using `Vortex-win.spec` to produce `dist\Vortex\Vortex.exe`
+1. Cleans `build\` and the previous `dist\Vortex.exe` and `dist\Vortex-Setup.exe`
+2. Runs PyInstaller using `Vortex-win.spec` to produce `dist\Vortex.exe` (one self-contained file)
 3. Runs Inno Setup using `Vortex.iss` to produce `dist\Vortex-Setup.exe`
 
 When it finishes:
 
 - **`dist\Vortex-Setup.exe`** is the installer to share or run.
-- **`dist\Vortex\`** is the unpacked app folder, useful for testing the
-  `.exe` directly without installing.
+- **`dist\Vortex.exe`** is the app itself, useful for testing without
+  installing.
 
 ---
 
@@ -98,7 +98,7 @@ When `main.py` or any dependency changes:
 
 ```
 git pull
-pip install -r requirements.txt          # in case of new deps
+pip install -U -r requirements-build.txt   # new deps and the latest yt-dlp
 build-win.bat
 ```
 
@@ -117,10 +117,11 @@ Inno Setup isn't installed, or it's in an unusual location. Reinstall from
 <https://jrsoftware.org/isdl.php> with default settings.
 
 **PyInstaller error: `No module named 'customtkinter'`**
-`pip install -r requirements.txt` wasn't run, or was run in a different
+`pip install -r requirements-build.txt` wasn't run, or was run in a different
 Python environment than the one on PATH. Re-run it from this folder.
 
 **`Vortex.exe` launches but crashes immediately**
-Run it from a Command Prompt to see the error: `dist\Vortex\Vortex.exe`.
-Most common cause: a missing data file. Add it to the `datas` list in
-`Vortex-win.spec` and rebuild.
+A crash during startup shows a traceback dialog. Errors after the window
+opens go to `%USERPROFILE%\.vortex\vortex.log`. Most common cause: a
+missing data file. Add it to the `datas` list in `Vortex-win.spec` and
+rebuild.

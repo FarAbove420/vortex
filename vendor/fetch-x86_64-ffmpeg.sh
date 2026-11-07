@@ -14,6 +14,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET="$SCRIPT_DIR/ffmpeg-macos-x86_64-v7.1"
 
 WHEEL_URL="https://files.pythonhosted.org/packages/da/58/87ef68ac83f4c7690961bce288fd8e382bc5f1513860fc7f90a9c1c1c6bf/imageio_ffmpeg-0.6.0-py3-none-macosx_10_9_intel.macosx_10_9_x86_64.whl"
+# SHA-256 of the wheel as published on PyPI:
+# https://pypi.org/pypi/imageio-ffmpeg/0.6.0/json
+WHEEL_SHA256="9d2baaf867088508d4a3458e61eeb30e945c4ad8016025545f66c4b5aaef0a61"
 WHEEL_INNER_PATH="imageio_ffmpeg/binaries/ffmpeg-macos-x86_64-v7.1"
 
 if [[ -x "$TARGET" ]]; then
@@ -25,7 +28,10 @@ TMP_WHEEL="$(mktemp -t iio_ffmpeg_x86.XXXXXX).whl"
 trap 'rm -f "$TMP_WHEEL"' EXIT
 
 echo "Downloading imageio-ffmpeg 0.6.0 x86_64 wheel..."
-curl -sL -o "$TMP_WHEEL" "$WHEEL_URL"
+curl -fsSL -o "$TMP_WHEEL" "$WHEEL_URL"
+
+echo "Verifying checksum..."
+echo "$WHEEL_SHA256  $TMP_WHEEL" | shasum -a 256 -c -
 
 echo "Extracting $WHEEL_INNER_PATH..."
 unzip -p "$TMP_WHEEL" "$WHEEL_INNER_PATH" > "$TARGET"

@@ -1,9 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
 # PyInstaller spec for Vortex. Run with: pyinstaller Vortex.spec
 
+import re
 import customtkinter
 import imageio_ffmpeg
 from pathlib import Path
+
+# Single source for the version number: __version__ in main.py
+VERSION = re.search(r'__version__ = "([^"]+)"',
+                    (Path(SPECPATH) / 'main.py').read_text()).group(1)
 
 CTK_PATH      = Path(customtkinter.__file__).parent
 IMAGEIO_FFMPEG_BIN_DIR = Path(imageio_ffmpeg.__file__).parent / 'binaries'
@@ -20,12 +25,16 @@ a = Analysis(
         (str(CTK_PATH / 'assets'), 'customtkinter/assets'),
         (str(IMAGEIO_FFMPEG_BIN_DIR), 'imageio_ffmpeg/binaries'),
         (str(VENDOR_FFMPEG_X86_64), 'imageio_ffmpeg/binaries'),
+        ('assets/icon.png', 'assets'),
     ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    # websockets' optional C speedups ship as an arm64-only wheel, which
+    # breaks the universal2 build. websockets falls back to pure Python.
+    # PIL (Pillow) is only used by assets/make_icon.py, not by the app.
+    excludes=['websockets.speedups', 'PIL'],
     noarchive=False,
 )
 
@@ -62,13 +71,13 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='Vortex.app',
-    icon=None,
+    icon='assets/Vortex.icns',
     bundle_identifier='com.vortex.app',
     info_plist={
         'CFBundleName':              'Vortex',
         'CFBundleDisplayName':       'Vortex',
-        'CFBundleShortVersionString':'0.1.1',
-        'CFBundleVersion':           '0.1.1',
+        'CFBundleShortVersionString':VERSION,
+        'CFBundleVersion':           VERSION,
         'NSHighResolutionCapable':   True,
         'LSMinimumSystemVersion':    '10.13.0',
     },

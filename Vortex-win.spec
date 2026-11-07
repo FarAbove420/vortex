@@ -22,12 +22,14 @@ a = Analysis(
         # binaries folder lets imageio_ffmpeg.get_ffmpeg_exe() find it at
         # runtime the same way it does in development.
         (str(IMAGEIO_FFMPEG_BIN_DIR), 'imageio_ffmpeg/binaries'),
+        # Window icon (the .exe icon itself is set below)
+        ('assets/Vortex.ico', 'assets'),
     ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['PIL'],                  # Pillow is only for assets/make_icon.py
     noarchive=False,
 )
 
@@ -50,7 +52,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,                         # add a path to Vortex.ico here later
+    icon='assets/Vortex.ico',
     version='version_info.txt',
     onefile=True,
 )

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Vortex - yt-dlp + ffmpeg desktop UI"""
 
+__version__ = "0.1.1"
+
 # ── SSL fix (must run before any HTTPS-using module is imported) ──────────────
 # python.org's Python on macOS ships without a certificate store, so HTTPS
 # fails out of the box. Point SSL at certifi's bundled cert list before
@@ -19,8 +21,11 @@ from tkinter import filedialog, messagebox
 import threading
 import subprocess
 import json
+import logging
 import re
+import shlex
 import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import datetime
 
@@ -30,6 +35,33 @@ try:
 except ImportError:
     YT_DLP_OK = False
 
+# ── Logging ───────────────────────────────────────────────────────────────────
+# The packaged app has no console, so print() output is lost. Everything worth
+# keeping (errors, ffmpeg output, yt-dlp warnings) goes to a small rotating log
+# file next to the settings file instead.
+APP_DIR  = Path.home() / ".vortex"
+LOG_PATH = APP_DIR / "vortex.log"
+log = logging.getLogger("vortex")
+
+
+def setup_logging():
+    log.setLevel(logging.INFO)
+    try:
+        APP_DIR.mkdir(parents=True, exist_ok=True)
+        handler = RotatingFileHandler(LOG_PATH, maxBytes=1_000_000, backupCount=2, encoding="utf-8")
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+        log.addHandler(handler)
+    except OSError:
+        log.addHandler(logging.NullHandler())
+
+
+class YtdlpLogger:
+    """Routes yt-dlp's output to our log file instead of stdout/stderr."""
+    def debug(self, msg):   pass
+    def info(self, msg):    pass
+    def warning(self, msg): log.warning("yt-dlp: %s", msg)
+    def error(self, msg):   log.error("yt-dlp: %s", msg)
+
 # On Windows, our own subprocess calls (ffmpeg duration probe, ffmpeg
 # convert) would briefly flash a black cmd window. CREATE_NO_WINDOW hides
 # it. yt-dlp already handles its internal Popen calls this way, but ours
@@ -38,6 +70,11 @@ if sys.platform == "win32":
     SUBPROCESS_FLAGS = {"creationflags": subprocess.CREATE_NO_WINDOW}
 else:
     SUBPROCESS_FLAGS = {}
+
+
+def resource_path(rel: str) -> Path:
+    """Path to a bundled file, both from source and in the PyInstaller build."""
+    return Path(getattr(sys, "_MEIPASS", Path(__file__).parent)) / rel
 
 
 # ── ffmpeg locator ────────────────────────────────────────────────────────────
@@ -84,14 +121,13 @@ WHITE      = "#ffffff"
 ctk.set_appearance_mode("dark")
 
 # ── Settings ──────────────────────────────────────────────────────────────────
-SETTINGS_PATH = Path.home() / ".vortex" / "settings.json"
+SETTINGS_PATH = APP_DIR / "settings.json"
 DEFAULTS = {
     "download_dir":         str(Path.home() / "Downloads"),
     "default_audio_format": "mp3",
     "ffmpeg_path":          "ffmpeg",
     "embed_subs":           False,
     "embed_thumbnail":      False,
-    "keep_video":           True,
 }
 
 def load_settings() -> dict:
@@ -122,6 +158,46 @@ def fmt_eta(sec: int) -> str:
     if sec < 60:   return f"{sec}s"
     if sec < 3600: return f"{sec//60}m {sec%60:02d}s"
     return                f"{sec//3600}h {(sec%3600)//60}m"
+
+def build_format(kind: str, quality: str) -> str:
+    """yt-dlp format selector for the Type and Quality dropdowns."""
+    if kind == "Audio Only":
+        return "bestaudio/best"
+    limit = ""
+    if quality == "4K":
+        limit = "[height<=2160]"
+    elif quality != "Best":
+        limit = f"[height<={quality.rstrip('p')}]"
+    if kind == "Video Only":
+        return f"bestvideo{limit}/best{limit}"
+    return f"bestvideo{limit}+bestaudio/best{limit}"
+
+
+def extra_args_to_opts(text: str) -> dict:
+    """Turn yt-dlp command line flags into YoutubeDL options.
+
+    yt-dlp's parse_options() returns every option, including defaults for
+    everything that wasn't given. Applying all of them would overwrite the
+    format, output folder, playlist and audio settings chosen in the UI, so
+    only the options that differ from yt-dlp's defaults are returned.
+    Raises ValueError when yt-dlp doesn't accept the flags.
+    """
+    import optparse
+    from yt_dlp import parse_options
+    try:
+        given   = parse_options(shlex.split(text)).ydl_opts
+        default = parse_options([]).ydl_opts
+    except (optparse.OptParseError, SystemExit, ValueError) as e:
+        # yt-dlp raises OptParseError for unknown or invalid flags
+        reason = str(e).strip().splitlines()[-1] if str(e).strip() else ""
+        raise ValueError(f"yt-dlp doesn't accept these extra args.\n\n{reason}") from e
+
+    diff = {k: v for k, v in given.items() if default.get(k) != v}
+    if "postprocessors" in diff:
+        diff["postprocessors"] = [p for p in given["postprocessors"]
+                                  if p not in default["postprocessors"]]
+    return diff
+
 
 def open_path(path: str):
     p = Path(path)
@@ -260,6 +336,8 @@ class Item:
         self.url     = url
         self.opts    = opts
         self.title   = title or url[:60]
+        self.title_known = bool(title)
+        self.cancel_requested = False
         self.status  = "queued"
         self.progress = 0.0
         self.speed   = 0.0
@@ -277,6 +355,7 @@ class Vortex(ctk.CTk):
         self.geometry("1240x780")
         self.minsize(1000, 640)
         self.configure(fg_color=BG)
+        self._set_icon()
 
         self.settings = load_settings()
         self.queue: list[Item] = []
@@ -284,6 +363,18 @@ class Vortex(ctk.CTk):
 
         self._build()
         self._nav("download")
+        self._tick()
+
+    def _set_icon(self):
+        try:
+            if sys.platform == "win32":
+                # Also stops CustomTkinter from swapping in its own icon
+                self.iconbitmap(str(resource_path("assets/Vortex.ico")))
+            else:
+                self._icon_img = tk.PhotoImage(file=str(resource_path("assets/icon.png")))
+                self.iconphoto(True, self._icon_img)
+        except Exception as e:
+            log.warning("Could not set window icon: %s", e)
 
     # ── Layout ────────────────────────────────────────────────────────────────
     def _build(self):
@@ -374,11 +465,23 @@ class Vortex(ctk.CTk):
         self._status_lbl.configure(text=f"● {text}", text_color=color)
 
     # ── Queue management ───────────────────────────────────────────────────────
+    # The download thread only updates its Item. Everything that touches the
+    # UI or self.active happens here on the main thread, in _tick().
     def enqueue(self, item: Item):
         self.queue.append(item)
         self._tabs["queue"].refresh()
         if self.active is None:
             self._next()
+
+    def _tick(self):
+        if self.active is not None:
+            if self.active.status != "downloading":
+                self.active = None
+                self._tabs["queue"].refresh()
+                self._next()
+            else:
+                self._tabs["queue"].refresh()
+        self.after(250, self._tick)
 
     def _next(self):
         pending = [i for i in self.queue if i.status == "queued"]
@@ -394,17 +497,19 @@ class Vortex(ctk.CTk):
 
     def _worker(self, item: Item):
         def hook(d):
+            if item.cancel_requested:
+                raise yt_dlp.utils.DownloadCancelled("Cancelled by user")
             if d["status"] == "downloading":
-                total = d.get("total_bytes") or d.get("total_bytes_estimate") or 1
+                total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
                 dl    = d.get("downloaded_bytes", 0)
-                item.progress = dl / total
+                item.progress = min(dl / total, 1.0) if total else 0.0
                 item.speed    = d.get("speed") or 0
                 item.eta      = d.get("eta") or 0
-                item.total    = total
+                item.total    = total or dl
                 fname = d.get("filename", "")
-                if fname and item.title == item.url[:60]:
+                if fname and not item.title_known:
                     item.title = Path(fname).stem[:60]
-                self.after(80, self._tabs["queue"].refresh)
+                    item.title_known = True
             elif d["status"] == "finished":
                 item.progress = 1.0
                 if d.get("filename"):
@@ -425,24 +530,28 @@ class Vortex(ctk.CTk):
             opts = item.opts.copy()
             opts["progress_hooks"]      = [hook]
             opts["postprocessor_hooks"] = [pp_hook]
+            opts["logger"]              = YtdlpLogger()
             opts.setdefault("quiet", True)
-            opts.setdefault("no_warnings", True)
+            opts.setdefault("noprogress", True)
             opts.setdefault("ffmpeg_location",
                             find_ffmpeg(self.settings.get("ffmpeg_path", "")))
+            log.info("Download started: %s", item.url)
             with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(item.url, download=False)
-                if info and item.title == item.url[:60]:
-                    item.title = (info.get("title") or item.title)[:60]
-                ydl.download([item.url])
-            item.status   = "done"
+                # One call: fetches the video info and downloads it.
+                info = ydl.extract_info(item.url, download=True)
+            if info and info.get("title"):
+                item.title = info["title"][:60]
+                item.title_known = True
             item.progress = 1.0
+            item.status   = "done"
+            log.info("Download finished: %s -> %s", item.url, item.filepath)
+        except yt_dlp.utils.DownloadCancelled:
+            item.status = "cancelled"
+            log.info("Download cancelled: %s", item.url)
         except Exception as e:
+            item.error  = re.sub(r"^ERROR:\s*", "", str(e))
             item.status = "error"
-            item.error  = str(e)
-
-        self.active = None
-        self.after(0, self._tabs["queue"].refresh)
-        self.after(100, self._next)
+            log.error("Download failed: %s: %s", item.url, item.error)
 
 
 # ── Download Tab ──────────────────────────────────────────────────────────────
@@ -512,7 +621,7 @@ class DownloadTab(ctk.CTkFrame):
         self.qual_col.grid(row=0, column=1, padx=(0, 22), sticky="w")
 
         self.afmt_col = opt_col(opts_frame, "Audio Format", self.afmt_var,
-                                ["MP3", "M4A", "FLAC", "WAV", "OPUS", "AAC"], 110)
+                                self.AUDIO_FORMATS, 110)
         self.afmt_col.grid(row=0, column=2, padx=(0, 22), sticky="w")
 
         # Save-to (always visible)
@@ -658,24 +767,27 @@ class DownloadTab(ctk.CTkFrame):
         else:
             self.extra_row.grid_remove()
 
+    def apply_settings(self):
+        """Pick up changes saved on the Settings tab."""
+        s = self.app.settings
+        self.dir_entry.delete(0, "end")
+        self.dir_entry.insert(0, s.get("download_dir", ""))
+        afmt = str(s.get("default_audio_format", "mp3")).upper()
+        if afmt in self.AUDIO_FORMATS:
+            self.afmt_var.set(afmt)
+        self.subs_var.set(bool(s.get("embed_subs", False)))
+        self.thumb_var.set(bool(s.get("embed_thumbnail", False)))
+
+    AUDIO_FORMATS = ["MP3", "M4A", "FLAC", "WAV", "OPUS", "AAC"]
+
     def _build_opts(self) -> dict:
+        """Raises ValueError when the extra args are invalid."""
         dl_dir = self.dir_entry.get().strip() or self.app.settings["download_dir"]
         t      = self.type_var.get()
-        q      = self.qual_var.get()
         afmt   = self.afmt_var.get().lower()
 
-        if t == "Audio Only":
-            fmt = "bestaudio/best"
-        elif q == "Best":
-            fmt = "bestvideo+bestaudio/best"
-        elif q == "4K":
-            fmt = "bestvideo[height<=2160]+bestaudio/best[height<=2160]"
-        else:
-            h = q.replace("p", "")
-            fmt = f"bestvideo[height<={h}]+bestaudio/best[height<={h}]"
-
         opts: dict = {
-            "format":  fmt,
+            "format":  build_format(t, self.qual_var.get()),
             "outtmpl": str(Path(dl_dir) / "%(title)s.%(ext)s"),
         }
 
@@ -705,12 +817,11 @@ class DownloadTab(ctk.CTkFrame):
         if self.extra_show_var.get():
             extra = self.extra_entry.get().strip()
             if extra:
-                try:
-                    import shlex
-                    from yt_dlp import parse_options
-                    opts.update(parse_options(shlex.split(extra)).ydl_opts)
-                except Exception as e:
-                    print(f"Failed to parse extra args: {e}")
+                extra_opts = extra_args_to_opts(extra)
+                pp = opts.get("postprocessors", []) + extra_opts.pop("postprocessors", [])
+                opts.update(extra_opts)
+                if pp:
+                    opts["postprocessors"] = pp
 
         return opts
 
@@ -723,20 +834,35 @@ class DownloadTab(ctk.CTkFrame):
             messagebox.showwarning("No URL", "Please enter a URL.")
             return
 
-        item = Item(url, self._build_opts())
+        try:
+            opts = self._build_opts()
+        except ValueError as e:
+            messagebox.showerror("Extra args", str(e))
+            return
+
+        item = Item(url, opts)
         self.app.enqueue(item)
 
         if to_queue:
             self.app._nav("queue")
         else:
+            self._tracked = item
             self._track(item)
 
+    _tracked: Item | None = None
+
     def _track(self, item: Item):
+        if item is not self._tracked:
+            return  # a newer download took over the progress card
         self.prog_title.configure(text=item.title[:80])
         if item.status == "downloading":
             self.prog_bar.set(item.progress)
+            if item.progress:
+                done = f"{item.progress*100:.1f}%"
+            else:
+                done = fmt_bytes(item.total) if item.total else "Starting..."
             self.prog_pct.configure(
-                text=f"{item.progress*100:.1f}%  {fmt_speed(item.speed) if item.speed else ''}  {'ETA ' + fmt_eta(item.eta) if item.eta else ''}",
+                text=f"{done}  {fmt_speed(item.speed) if item.speed else ''}  {'ETA ' + fmt_eta(item.eta) if item.eta else ''}",
                 text_color=ACCENT
             )
         elif item.status == "done":
@@ -745,6 +871,9 @@ class DownloadTab(ctk.CTkFrame):
             return
         elif item.status == "error":
             self.prog_pct.configure(text=f"Error: {item.error[:60]}", text_color=ERROR)
+            return
+        elif item.status == "cancelled":
+            self.prog_pct.configure(text="Cancelled", text_color=TEXT_DIM)
             return
         elif item.status == "queued":
             self.prog_pct.configure(text="Queued...", text_color=TEXT_DIM)
@@ -824,7 +953,8 @@ class QueueTab(ctk.CTkFrame):
 
 
 class QueueRow(ctk.CTkFrame):
-    _STATUS_COLOR = {"queued": TEXT_DIM, "downloading": ACCENT, "done": SUCCESS, "error": ERROR}
+    _STATUS_COLOR = {"queued": TEXT_DIM, "downloading": ACCENT, "done": SUCCESS, "error": ERROR,
+                     "cancelled": TEXT_DIM}
     _STATUS_ICON  = {"queued": "◷", "downloading": "↓", "done": "✓", "error": "✗", "cancelled": "—"}
     _BAR_COLOR    = {"queued": BORDER, "downloading": ACCENT, "done": SUCCESS, "error": ERROR}
 
@@ -900,8 +1030,10 @@ class QueueRow(ctk.CTkFrame):
         self.open_btn.pack_forget()
         self.folder_btn.pack_forget()
 
-        if i.status == "downloading":
-            parts = [f"{i.progress*100:.1f}%"]
+        if i.status == "downloading" and i.cancel_requested:
+            self.info_lbl.configure(text="Cancelling...", text_color=TEXT_DIM)
+        elif i.status == "downloading":
+            parts = [f"{i.progress*100:.1f}%" if i.progress else fmt_bytes(i.total)]
             if i.speed: parts.append(fmt_speed(i.speed))
             if i.eta:   parts.append(f"ETA {fmt_eta(i.eta)}")
             self.info_lbl.configure(text="  ".join(parts), text_color=ACCENT)
@@ -915,6 +1047,8 @@ class QueueRow(ctk.CTkFrame):
             self.info_lbl.configure(text=f"Error: {i.error}", text_color=ERROR)
             if "Sign in to confirm" in i.error or "not a bot" in i.error:
                 self.cookie_btn.pack(side="left")
+        elif i.status == "cancelled":
+            self.info_lbl.configure(text="Cancelled", text_color=TEXT_DIM)
         else:
             self.info_lbl.configure(text=f"Queued · {i.added}", text_color=TEXT_DIM)
 
@@ -929,6 +1063,7 @@ class QueueRow(ctk.CTkFrame):
     def _retry_with_cookies(self):
         browser = get_default_browser()
         self.item.opts["cookiesfrombrowser"] = (browser, None, None, None)
+        self.item.cancel_requested = False
         self.item.status   = "queued"
         self.item.progress = 0.0
         self.item.speed    = 0.0
@@ -941,6 +1076,9 @@ class QueueRow(ctk.CTkFrame):
 
     def _remove(self):
         if self.item.status == "downloading":
+            # Stops at the next progress update; _tick() then moves on.
+            self.item.cancel_requested = True
+            self.update_ui()
             return
         if self.item in self.app.queue:
             self.app.queue.remove(self.item)
@@ -1010,9 +1148,9 @@ class ConvertTab(ctk.CTkFrame):
                                   ["Copy","H.264","H.265","VP9","AV1"], 120)
         self.vcodec_col.grid(row=0, column=1, padx=(0, 22), sticky="w")
 
-        acodec_col = opt_col(opts, "Audio Codec", self.acodec_var,
-                             ["Copy","AAC","MP3","FLAC","Opus"], 110)
-        acodec_col.grid(row=0, column=2, padx=(0, 22), sticky="w")
+        self.acodec_col = opt_col(opts, "Audio Codec", self.acodec_var,
+                                  ["Copy","AAC","MP3","FLAC","Opus"], 110)
+        self.acodec_col.grid(row=0, column=2, padx=(0, 22), sticky="w")
 
         self.crf_col = opt_col(opts, "Quality (CRF)", self.crf_var,
                                ["Auto","18","20","23","26","28","32"], 110)
@@ -1037,9 +1175,8 @@ class ConvertTab(ctk.CTkFrame):
             setattr(self, attr, entry)
 
         # Convert button
-        accent_btn(c, "  ⇄  Convert", self._convert, width=190, height=54).grid(
-            row=6, column=0, padx=22, pady=(4, 22), sticky="w"
-        )
+        self.convert_btn = accent_btn(c, "  ⇄  Convert", self._convert, width=190, height=54)
+        self.convert_btn.grid(row=6, column=0, padx=22, pady=(4, 22), sticky="w")
 
         # Progress
         self.prog_card = card(self)
@@ -1059,17 +1196,31 @@ class ConvertTab(ctk.CTkFrame):
         # Set initial visibility based on default format
         self._on_fmt_change(self.fmt_var.get())
 
-    # Output formats that are audio-only (no video stream)
-    AUDIO_FORMATS = {"MP3", "M4A", "FLAC", "WAV"}
+    # Output formats that are audio-only (no video stream), with the encoder
+    # each one needs. The audio stream can't simply be copied into these:
+    # an MP4's AAC audio, for example, is not valid inside an .mp3 file.
+    AUDIO_FORMATS = {"MP3": "libmp3lame", "M4A": "aac", "FLAC": "flac", "WAV": "pcm_s16le"}
+
+    _auto_out = ""  # output path we filled in ourselves, so we may replace it
 
     def _on_fmt_change(self, value: str):
         is_audio = value in self.AUDIO_FORMATS
         if is_audio:
             self.vcodec_col.grid_remove()
             self.crf_col.grid_remove()
+            self.acodec_col.grid_remove()
         else:
             self.vcodec_col.grid()
             self.crf_col.grid()
+            self.acodec_col.grid()
+        # Keep an auto-filled output name in step with the chosen format
+        if self._auto_out and self.out_entry.get().strip() == self._auto_out:
+            self._fill_out(self.in_entry.get().strip())
+
+    def _fill_out(self, inp: str):
+        self._auto_out = str(Path(inp).with_suffix(f".out.{self.fmt_var.get().lower()}"))
+        self.out_entry.delete(0, "end")
+        self.out_entry.insert(0, self._auto_out)
 
     def _browse_in(self):
         path = filedialog.askopenfilename(
@@ -1078,10 +1229,7 @@ class ConvertTab(ctk.CTkFrame):
         if path:
             self.in_entry.delete(0, "end")
             self.in_entry.insert(0, path)
-            p = Path(path)
-            ext = self.fmt_var.get().lower()
-            self.out_entry.delete(0, "end")
-            self.out_entry.insert(0, str(p.with_suffix(f".out.{ext}")))
+            self._fill_out(path)
 
     def _browse_out(self):
         path = filedialog.asksaveasfilename()
@@ -1096,17 +1244,23 @@ class ConvertTab(ctk.CTkFrame):
             messagebox.showwarning("No Input", "Select an input file first.")
             return
         if not out:
-            p   = Path(inp)
-            out = str(p.with_suffix(f".out.{self.fmt_var.get().lower()}"))
-            self.out_entry.insert(0, out)
+            self._fill_out(inp)
+            out = self._auto_out
+        self.convert_btn.configure(state="disabled")
         threading.Thread(target=self._run, args=(inp, out), daemon=True).start()
 
     def _run(self, inp: str, out: str):
+        try:
+            self._run_ffmpeg(inp, out)
+        finally:
+            self.after(0, lambda: self.convert_btn.configure(state="normal"))
+
+    def _run_ffmpeg(self, inp: str, out: str):
         self.after(0, lambda: self.conv_status.configure(text="Starting...", text_color=ACCENT))
         self.after(0, lambda: self.conv_bar.set(0))
 
         ffmpeg = find_ffmpeg(self.app.settings.get("ffmpeg_path", ""))
-        cmd    = [ffmpeg, "-i", inp]
+        cmd    = [ffmpeg, "-hide_banner", "-loglevel", "error", "-i", inp]
 
         start = self.trim_start.get().strip()
         end   = self.trim_end.get().strip()
@@ -1121,26 +1275,29 @@ class ConvertTab(ctk.CTkFrame):
         is_audio_out = self.fmt_var.get() in self.AUDIO_FORMATS
 
         if is_audio_out:
-            # Audio-only output: strip video, no codec/CRF flags apply
-            cmd += ["-vn"]
+            # Audio-only output: strip video and use the format's own encoder
+            cmd += ["-vn", "-c:a", self.AUDIO_FORMATS[self.fmt_var.get()]]
         else:
             cmd += ["-c:v", "copy" if vc == "Copy" else vc_map.get(vc, vc)]
             if vc != "Copy" and self.crf_var.get() != "Auto":
                 cmd += ["-crf", self.crf_var.get()]
+            cmd += ["-c:a", "copy" if ac == "Copy" else ac_map.get(ac, ac)]
 
-        cmd += ["-c:a", "copy" if ac == "Copy" else ac_map.get(ac, ac)]
         cmd += ["-progress", "pipe:1", "-y", out]
 
         duration = self._probe_duration(inp)
+        log.info("Convert: %s", subprocess.list2cmdline(cmd))
 
         try:
             proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True, errors="replace",
                 **SUBPROCESS_FLAGS,
             )
             # Drain stderr on a background thread to prevent buffer deadlock
             stderr_buf: list[str] = []
-            threading.Thread(target=lambda: [stderr_buf.append(l) for l in proc.stderr], daemon=True).start()
+            drain = threading.Thread(target=lambda: stderr_buf.extend(proc.stderr), daemon=True)
+            drain.start()
 
             for line in proc.stdout:
                 if line.startswith("out_time_ms="):
@@ -1155,21 +1312,25 @@ class ConvertTab(ctk.CTkFrame):
                         pass
 
             proc.wait()
+            drain.join(timeout=5)
             if proc.returncode == 0:
                 self.after(0, lambda: self.conv_bar.set(1.0))
                 self.after(0, lambda: self.conv_status.configure(text="Done!", text_color=SUCCESS))
             else:
-                err = "".join(stderr_buf[-5:])
-                self.after(0, lambda e=err: self.conv_status.configure(
-                    text=f"ffmpeg error — check terminal", text_color=ERROR
+                lines = [l.strip() for l in stderr_buf if l.strip()]
+                log.error("ffmpeg exited with %s:\n%s", proc.returncode, "\n".join(lines))
+                short = lines[-1] if lines else f"ffmpeg exited with code {proc.returncode}"
+                self.after(0, lambda e=short: self.conv_status.configure(
+                    text=f"Error: {e[:90]}", text_color=ERROR
                 ))
-                print(err)
         except FileNotFoundError:
             self.after(0, lambda: self.conv_status.configure(
                 text="ffmpeg not found. Set path in Settings.", text_color=ERROR
             ))
         except Exception as e:
-            self.after(0, lambda: self.conv_status.configure(text=str(e), text_color=ERROR))
+            # Bind the message now: Python deletes `e` when the except block ends
+            log.exception("Convert failed")
+            self.after(0, lambda msg=str(e): self.conv_status.configure(text=msg, text_color=ERROR))
 
     def _probe_duration(self, path: str) -> float:
         """Get media duration in seconds by parsing ffmpeg's stderr.
@@ -1247,7 +1408,6 @@ class SettingsTab(ctk.CTkFrame):
         for key, label_text in [
             ("embed_subs",      "Embed subtitles by default"),
             ("embed_thumbnail", "Embed thumbnail by default"),
-            ("keep_video",      "Keep video when extracting audio"),
         ]:
             var = ctk.BooleanVar(value=bool(self.app.settings.get(key, False)))
             self._checks[key] = var
@@ -1272,11 +1432,15 @@ class SettingsTab(ctk.CTkFrame):
         for key, var in self._checks.items():
             self.app.settings[key] = var.get()
         save_settings(self.app.settings)
+        self.app._tabs["download"].apply_settings()
         self.saved_lbl.configure(text="✓ Saved")
         self.after(3000, lambda: self.saved_lbl.configure(text=""))
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    setup_logging()
+    log.info("Vortex %s starting (yt-dlp %s)", __version__,
+             yt_dlp.version.__version__ if YT_DLP_OK else "missing")
     app = Vortex()
     app.mainloop()

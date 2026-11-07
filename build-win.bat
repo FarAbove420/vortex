@@ -2,7 +2,7 @@
 REM Vortex Windows build script.
 REM Run from the repo root in a Command Prompt with Python on PATH.
 REM Requires:
-REM   - Python 3.x with `pip install -r requirements.txt` and `pip install pyinstaller`
+REM   - Python 3.10+ with `pip install -r requirements-build.txt`
 REM   - Inno Setup 6 installed (https://jrsoftware.org/isdl.php)
 REM See WINDOWS_BUILD.md for full setup steps.
 
@@ -10,7 +10,7 @@ setlocal enabledelayedexpansion
 
 echo === [1/3] Cleaning old build artifacts ===
 if exist build  rmdir /s /q build
-if exist "dist\Vortex"  rmdir /s /q "dist\Vortex"
+if exist "dist\Vortex.exe"  del /q "dist\Vortex.exe"
 if exist "dist\Vortex-Setup.exe"  del /q "dist\Vortex-Setup.exe"
 
 echo.
@@ -21,9 +21,9 @@ if errorlevel 1 (
     echo PyInstaller failed. See messages above.
     exit /b 1
 )
-if not exist "dist\Vortex\Vortex.exe" (
+if not exist "dist\Vortex.exe" (
     echo.
-    echo PyInstaller finished but dist\Vortex\Vortex.exe is missing. Aborting.
+    echo PyInstaller finished but dist\Vortex.exe is missing. Aborting.
     exit /b 1
 )
 
@@ -62,5 +62,5 @@ if errorlevel 1 (
 echo.
 echo === Done ===
 echo Installer: dist\Vortex-Setup.exe
-echo App folder: dist\Vortex\
+echo App:       dist\Vortex.exe
 endlocal
