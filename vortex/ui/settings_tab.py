@@ -23,6 +23,7 @@ class SettingsTab(ctk.CTkFrame):
         lbl(self.body, title, size=15, weight="bold").pack(anchor="w", pady=(18, 6))
         c = card(self.body)
         c.pack(fill="x")
+        c.grid_columnconfigure(0, minsize=320)   # same label width in every section
         c.grid_columnconfigure(1, weight=1)
         return c
 
@@ -70,7 +71,7 @@ class SettingsTab(ctk.CTkFrame):
         self._row(c, 0, "Text size")
         self.size_var = ctk.StringVar(value=s.get("text_size", "Normal"))
         dropdown(c, list(TEXT_SIZES), width=120, variable=self.size_var).grid(row=0, column=1, sticky="w", pady=(14, 6))
-        self._check(c, 1, "show_advanced", "Show the advanced Download and Convert tabs")
+        self._check(c, 1, "show_advanced", "Show the Advanced tab (every quality, format and yt-dlp option)")
         self._check(c, 2, "notify", "Notify me when a download finishes in the background")
         ctk.CTkFrame(c, height=8, fg_color="transparent").grid(row=3, column=0)
 

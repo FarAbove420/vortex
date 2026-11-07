@@ -23,7 +23,7 @@ class DownloadTab(ctk.CTkFrame):
         # ── Header
         hdr = ctk.CTkFrame(self, fg_color="transparent")
         hdr.grid(row=0, column=0, sticky="ew", padx=32, pady=(30, 0))
-        lbl(hdr, "Download (advanced)", size=28, weight="bold").pack(side="left")
+        lbl(hdr, "Advanced download", size=28, weight="bold").pack(side="left")
         lbl(hdr, "Paste a URL and configure your download", size=13, color=TEXT_DIM).pack(
             side="left", padx=(14, 0), pady=(10, 0)
         )

@@ -118,7 +118,7 @@ class QueueRow(ctk.CTkFrame):
             self, text="", anchor="w", wraplength=500,
             font=ctk.CTkFont(size=11), text_color=TEXT_DIM
         )
-        self.info_lbl.grid(row=2, column=1, sticky="w", padx=(0, 12), pady=(0, 4))
+        self.info_lbl.grid(row=2, column=1, sticky="w", padx=(0, 12), pady=(0, 8))
 
         self.action_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.action_frame.grid(row=3, column=1, padx=(0, 12), pady=(0, 10), sticky="w")
@@ -157,11 +157,19 @@ class QueueRow(ctk.CTkFrame):
 
         text, tcolor = status_text(i, short_error=False)
         self.info_lbl.configure(text=text, text_color=tcolor)
+        has_buttons = True
         if i.status == "done" and i.filepath:
             self.open_btn.pack(side="left", padx=(0, 8))
             self.folder_btn.pack(side="left")
         elif i.status == "error" and ("Sign in to confirm" in i.error or "not a bot" in i.error):
             self.cookie_btn.pack(side="left")
+        else:
+            has_buttons = False
+        # An empty CTkFrame keeps its default 200 px height, so hide it
+        if has_buttons:
+            self.action_frame.grid()
+        else:
+            hide(self.action_frame)
 
     def _open_file(self):
         if self.item.filepath:

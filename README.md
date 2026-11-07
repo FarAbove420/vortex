@@ -12,6 +12,8 @@ install.
 
 Runs on Windows and macOS.
 
+![Vortex Home: a Big Buck Bunny preview with the Song and Video buttons, and a finished download](docs/screenshots/home.png)
+
 ## Download
 
 Get the latest version from the
@@ -41,9 +43,15 @@ The rest:
 - **History**: everything downloaded before, also after a restart
 - **Settings**: download folder, song format, text size, notifications and
   updates
-- **Advanced tabs** (switch them on in Settings): every quality and format
-  option, subtitles, SponsorBlock, extra yt-dlp flags, and a **Convert** tab
-  for local files
+- **Convert**: change local files to another format, change codecs and trim
+- **Advanced** (switch it on in Settings, a tip on Home points there): every
+  quality and format option, subtitles, SponsorBlock and extra yt-dlp flags
+
+| Search by song name | The queue |
+|---|---|
+| ![Search results for "blender open movie"](docs/screenshots/search.png) | ![Queue with two finished downloads, one downloading and one waiting](docs/screenshots/queue.png) |
+| **History** | **Settings** |
+| ![History of finished downloads](docs/screenshots/history.png) | ![Settings: download folder, song format, text size, notifications](docs/screenshots/settings.png) |
 
 Vortex never overwrites a file: a second song with the same name is saved as
 "Title (2)". It warns before quitting with unfinished downloads, and only one

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Convert is back in the sidebar; only the Advanced download tab is hidden
+  by default, with a tip on Home pointing to the setting
+- Fixed: a row in the queue that was downloading or waiting was much too tall
+- Search results line up on the left; Settings dropdowns line up across
+  sections
+- Screenshots in the README
+
 ## 0.3.0
 
 - New Home tab: paste a link or search by song name, see a preview with the

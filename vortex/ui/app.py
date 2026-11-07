@@ -24,8 +24,8 @@ NAV = [
     ("home",     "  ⌂   Home",      False),
     ("queue",    "  ☰   Queue",     False),
     ("history",  "  ⟲   History",   False),
-    ("download", "  ↓   Download",  True),    # advanced
-    ("convert",  "  ⇄   Convert",   True),    # advanced
+    ("convert",  "  ⇄   Convert",   False),
+    ("download", "  ↓   Advanced",  True),    # only with "show_advanced" on
     ("settings", "  ⚙   Settings",  False),
 ]
 

@@ -11,7 +11,7 @@ from ..media import (Item, cli_to_opts, download_args, final_exts, fetch_preview
                      looks_like_url, best_thumbnail_url, thumbnail_png_b64)
 from ..system import fmt_duration, open_path, reveal_in_folder
 from ..ytdl import YT_DLP_OK
-from .theme import (BG, CARD, CARD_HOVER, ACCENT_DK, TEXT, TEXT_DIM, ERROR, lbl, card, fancy_entry, ghost_btn, accent_btn, progress_bar, hide)
+from .theme import (BG, CARD, CARD_HOVER, ACCENT_DK, TEXT_DIM, ERROR, lbl, card, fancy_entry, ghost_btn, accent_btn, progress_bar, hide)
 from .progress import status_text
 
 
@@ -78,7 +78,7 @@ class HomeTab(ctk.CTkFrame):
 
         # Progress of the last download started here
         self.prog = card(self)
-        self.prog.grid(row=4, column=0, padx=32, pady=(16, 24), sticky="new")
+        self.prog.grid(row=4, column=0, padx=32, pady=(16, 8), sticky="new")
         self.prog.grid_columnconfigure(0, weight=1)
         self.prog_title = lbl(self.prog, "", size=13, weight="bold", anchor="w")
         self.prog_title.grid(row=0, column=0, sticky="ew", padx=22, pady=(18, 6))
@@ -91,6 +91,12 @@ class HomeTab(ctk.CTkFrame):
         self.open_btn = ghost_btn(acts, "↗  Play / open", self._open, width=140, height=34)
         self.folder_btn = ghost_btn(acts, "📂  Show in folder", self._reveal, width=160, height=34)
         hide(self.prog)
+
+        # Tip at the bottom, only while the Advanced tab is switched off
+        self.tip = lbl(self, "Tip: need a specific quality, format or subtitles? Turn on the "
+                             "Advanced tab in Settings.", size=12, color=TEXT_DIM, cursor="hand2")
+        self.tip.grid(row=5, column=0, sticky="w", padx=36, pady=(0, 20))
+        self.tip.bind("<Button-1>", lambda e: self.app._nav("settings"))
         self.refresh_labels()
 
     def refresh_labels(self):
@@ -98,6 +104,10 @@ class HomeTab(ctk.CTkFrame):
         afmt = str(self.app.settings.get("default_audio_format", "mp3")).upper()
         self.song_btn.configure(text=f"♪  Song ({afmt})")
         self.video_btn.configure(text="▶  Video (MP4)" if self.app.settings.get("prefer_mp4", True) else "▶  Video")
+        if self.app.settings.get("show_advanced"):
+            hide(self.tip)
+        else:
+            self.tip.grid()
 
     # ── Clipboard ─────────────────────────────────────────────────────────────
     def check_clipboard(self):
@@ -176,13 +186,22 @@ class HomeTab(ctk.CTkFrame):
         self.hint.configure(text="Pick the right one:", text_color=TEXT_DIM)
         for i, r in enumerate(results):
             meta = "  ·  ".join(x for x in (r["channel"], fmt_duration(r["duration"])) if x)
-            b = ctk.CTkButton(
-                self.results, text=f"{r['title']}\n{meta}", anchor="w", height=52,
-                corner_radius=10, fg_color="transparent", hover_color=CARD_HOVER,
-                text_color=TEXT, font=ctk.CTkFont(size=13),
-                command=lambda u=r["url"]: self._lookup(u))
-            b.grid(row=i, column=0, sticky="ew", padx=12, pady=(10 if i == 0 else 2, 10 if i == len(results) - 1 else 2))
+            self._result_row(i, r["title"], meta, r["url"], last=i == len(results) - 1)
         self.results.grid()
+
+    def _result_row(self, i, title, meta, url, last):
+        """One clickable search result: title, then channel and length,
+        both lined up on the left (a CTkButton centres multi-line text)."""
+        row = ctk.CTkFrame(self.results, fg_color="transparent", corner_radius=10, cursor="hand2")
+        row.grid(row=i, column=0, sticky="ew", padx=12, pady=(10 if i == 0 else 2, 10 if last else 2))
+        t = lbl(row, title, size=13, weight="bold", anchor="w")
+        t.pack(fill="x", padx=12, pady=(8, 0))
+        m = lbl(row, meta, size=12, color=TEXT_DIM, anchor="w")
+        m.pack(fill="x", padx=12, pady=(0, 8))
+        for w in (row, t, m):
+            w.bind("<Button-1>", lambda e: self._lookup(url))
+            w.bind("<Enter>", lambda e: row.configure(fg_color=CARD_HOVER))
+            w.bind("<Leave>", lambda e: row.configure(fg_color="transparent"))
 
     def _lookup(self, url: str):
         hide(self.results)

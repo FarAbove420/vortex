@@ -65,7 +65,7 @@ DEFAULTS = {
     "embed_thumbnail":      True,    # cover art in songs, thumbnail in videos
     "prefer_mp4":           True,    # videos that play on any device
     "auto_update":          True,
-    "show_advanced":        False,   # Download (advanced) and Convert tabs
+    "show_advanced":        False,   # the Advanced download tab
     "text_size":            "Normal",
     "notify":               True,
 }
