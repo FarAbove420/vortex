@@ -54,7 +54,8 @@ check signatures.
 ## Building the app
 
 GitHub Actions builds both versions: push a tag like `v0.3.0` and
-`.github/workflows/release.yml` builds Windows and macOS and publishes a
+`.github/workflows/release.yml` builds Windows (Intel/AMD and a native ARM64
+build, both in one installer that picks the right one) and macOS, and publishes a
 release with the notes from [CHANGELOG.md](CHANGELOG.md). "Run workflow" on the
 Actions tab builds without publishing.
 

@@ -11,13 +11,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET="$SCRIPT_DIR/ffmpeg-macos-x86_64-v7.1"
+TARGET="$SCRIPT_DIR/ffmpeg-macos-x86_64-v9.0.2"
 
-WHEEL_URL="https://files.pythonhosted.org/packages/da/58/87ef68ac83f4c7690961bce288fd8e382bc5f1513860fc7f90a9c1c1c6bf/imageio_ffmpeg-0.6.0-py3-none-macosx_10_9_intel.macosx_10_9_x86_64.whl"
+WHEEL_URL="https://files.pythonhosted.org/packages/da/24/2c3a7c69453bfb8374ddbbb5007346bad4a4247bc86882f3521cd615f929/imageio_ffmpeg-0.8.1-py3-none-macosx_10_13_x86_64.whl"
 # SHA-256 of the wheel as published on PyPI:
-# https://pypi.org/pypi/imageio-ffmpeg/0.6.0/json
-WHEEL_SHA256="9d2baaf867088508d4a3458e61eeb30e945c4ad8016025545f66c4b5aaef0a61"
-WHEEL_INNER_PATH="imageio_ffmpeg/binaries/ffmpeg-macos-x86_64-v7.1"
+# https://pypi.org/pypi/imageio-ffmpeg/0.8.1/json
+WHEEL_SHA256="9538a10e598257263b5de1a1c1b86e7603417bc219245b1e279b452e5e48cc20"
+WHEEL_INNER_PATH="imageio_ffmpeg/binaries/ffmpeg-macos-x86_64-v9.0.2"
 
 if [[ -x "$TARGET" ]]; then
     echo "Already present: $TARGET"
@@ -27,7 +27,7 @@ fi
 TMP_WHEEL="$(mktemp -t iio_ffmpeg_x86.XXXXXX).whl"
 trap 'rm -f "$TMP_WHEEL"' EXIT
 
-echo "Downloading imageio-ffmpeg 0.6.0 x86_64 wheel..."
+echo "Downloading imageio-ffmpeg 0.8.1 x86_64 wheel..."
 curl -fsSL -o "$TMP_WHEEL" "$WHEEL_URL"
 
 echo "Verifying checksum..."

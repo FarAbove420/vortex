@@ -16,7 +16,7 @@ IMAGEIO_FFMPEG_BIN_DIR = Path(imageio_ffmpeg.__file__).parent / 'binaries'
 # x86_64 ffmpeg vendored from the macosx_10_9_x86_64 wheel on PyPI, so the
 # universal2 bundle has an Intel binary too. imageio_ffmpeg picks the right
 # one at runtime via FNAME_PER_PLATFORM.
-VENDOR_FFMPEG_X86_64 = Path(SPECPATH) / 'vendor' / 'ffmpeg-macos-x86_64-v7.1'
+VENDOR_FFMPEG_X86_64 = Path(SPECPATH) / 'vendor' / 'ffmpeg-macos-x86_64-v9.0.2'
 
 a = Analysis(
     ['main.py'],
@@ -83,6 +83,9 @@ app = BUNDLE(
         'CFBundleShortVersionString':VERSION,
         'CFBundleVersion':           VERSION,
         'NSHighResolutionCapable':   True,
-        'LSMinimumSystemVersion':    '10.13.0',
+        # Python 3.14 needs 10.15 on Intel; the Apple Silicon FFmpeg in
+        # imageio-ffmpeg 0.8.1 needs macOS 12
+        'LSMinimumSystemVersion':    '10.15',
+        'LSMinimumSystemVersionByArchitecture': {'x86_64': '10.15', 'arm64': '12.0'},
     },
 )

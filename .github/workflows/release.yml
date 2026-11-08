@@ -20,8 +20,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: pip install -r requirements.txt pytest pyflakes
@@ -33,20 +33,61 @@ jobs:
           code=$(python -c "import re;print(re.search(r'__version__ = \"(.+)\"', open('vortex/__init__.py').read()).group(1))")
           [ "v$code" = "${GITHUB_REF_NAME}" ] || { echo "Tag ${GITHUB_REF_NAME} but vortex/__init__.py says $code"; exit 1; }
 
-  windows:
+  # Native build for Windows on ARM (Snapdragon laptops). Without it, those
+  # run the Intel/AMD build under emulation, and converting video is slow.
+  windows-arm64:
     needs: test
-    runs-on: windows-latest
+    runs-on: windows-11-arm
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          architecture: arm64
+      - run: pip install -r requirements-build.txt
+      - run: pyinstaller Vortex-win.spec --noconfirm
+      - name: Check Vortex.exe and its FFmpeg are ARM64 programs
+        shell: python
+        run: |
+          import glob, struct
+          import imageio_ffmpeg
+          def machine(path):
+              with open(path, "rb") as f:
+                  data = f.read(4096)
+              pe = struct.unpack_from("<I", data, 0x3C)[0]
+              return struct.unpack_from("<H", data, pe + 4)[0]
+          for path in ["dist/Vortex.exe", imageio_ffmpeg.get_ffmpeg_exe()]:
+              m = machine(path)
+              print(path, hex(m))
+              assert m == 0xAA64, f"{path} is not ARM64"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-arm64-exe
+          path: dist/Vortex.exe
+
+  # Intel/AMD build, plus one installer holding both programs: it installs
+  # the ARM64 one on ARM PCs and the x64 one everywhere else.
+  windows:
+    needs: [test, windows-arm64]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-arm64-exe
+          path: dist/arm64
+      - name: The ARM64 program is there
+        shell: pwsh
+        run: if (!(Test-Path dist/arm64/Vortex.exe)) { exit 1 }
       - run: pip install -r requirements-build.txt
       - run: choco install innosetup -y --no-progress
       - name: Build Vortex.exe and Vortex-Setup.exe
         shell: cmd
         run: build-win.bat
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows
           path: dist/Vortex-Setup.exe
@@ -55,7 +96,7 @@ jobs:
     needs: test
     runs-on: macos-latest   # arm64; the universal2 Python builds both architectures
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install universal2 Python from python.org
         run: |
           curl -fsSL -o python.pkg "$MAC_PYTHON_PKG"
@@ -67,7 +108,7 @@ jobs:
       - name: Check both architectures are in the app
         run: lipo -archs dist/Vortex.app/Contents/MacOS/Vortex | grep -q "x86_64 arm64"
       - run: ditto -c -k --keepParent dist/Vortex.app dist/Vortex-macOS.zip
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos
           path: dist/Vortex-macOS.zip
@@ -77,8 +118,8 @@ jobs:
     needs: [windows, macos]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           path: out
       - name: Publish the release

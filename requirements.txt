@@ -3,7 +3,7 @@
 # with a JavaScript runtime such as Deno) and the cookie decryption library.
 yt-dlp[default]>=2026.3.17
 certifi
-customtkinter==5.2.2
+customtkinter==6.0.0
 # Pinned: vendor/fetch-x86_64-ffmpeg.sh downloads the x86_64 ffmpeg from this
 # exact version for the macOS universal2 build. Update both together.
-imageio-ffmpeg==0.6.0
+imageio-ffmpeg==0.8.1

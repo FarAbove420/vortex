@@ -12,6 +12,13 @@
   under "More options"
 - Faster encoder settings, and Small and Smallest also lower the resolution
 - Convert asks before replacing a file and won't overwrite the original
+- Native Windows build for ARM processors (Snapdragon laptops). The installer
+  picks it by itself; before, those PCs ran the Intel/AMD build emulated,
+  and converting video was very slow
+- Updated: CustomTkinter 6.0.0, FFmpeg 9.0 (imageio-ffmpeg 0.8.1), and the
+  GitHub Actions used for builds
+- macOS: the app now states its real minimum, macOS 10.15 on Intel Macs and
+  macOS 12 on Apple Silicon (the new FFmpeg needs it)
 
 ## 0.3.2
 

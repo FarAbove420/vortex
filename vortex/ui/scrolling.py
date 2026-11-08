@@ -1,7 +1,7 @@
 """Mouse wheel and trackpad scrolling for every CTkScrollableFrame.
 
-CustomTkinter 5.2.2 only listens for <MouseWheel> and assumes Tk 8.6's wheel
-values. Python 3.14 on macOS ships Tk 9, where:
+CustomTkinter (5.2.2 and 6.0.0) only listens for <MouseWheel> and assumes Tk
+8.6's wheel values. Python 3.14 on macOS ships Tk 9, where:
 - trackpads send a separate <TouchpadScroll> event, with the x and y
   distance packed into one number (see ::tk::PreciseScrollDeltas in Tk), so
   two-finger scrolling did nothing at all;

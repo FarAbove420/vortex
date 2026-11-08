@@ -41,7 +41,15 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 [Files]
 ; PyInstaller is configured for one-file mode (see Vortex-win.spec), so the
 ; whole app is a single self-contained Vortex.exe at dist\Vortex.exe.
-Source: "dist\Vortex.exe"; DestDir: "{app}"; Flags: ignoreversion
+; The release workflow also puts a native ARM64 build at dist\arm64\Vortex.exe.
+; When it's there, ARM PCs get that one instead of the emulated x64 program.
+#define ArmExe AddBackslash(SourcePath) + "dist\arm64\Vortex.exe"
+#if FileExists(ArmExe)
+Source: "dist\Vortex.exe";       DestDir: "{app}"; Flags: ignoreversion; Check: not IsArm64
+Source: "dist\arm64\Vortex.exe"; DestDir: "{app}"; Flags: ignoreversion; Check: IsArm64
+#else
+Source: "dist\Vortex.exe";       DestDir: "{app}"; Flags: ignoreversion
+#endif
 
 [Icons]
 Name: "{group}\{#MyAppName}";          Filename: "{app}\{#MyAppExeName}"

@@ -33,24 +33,33 @@ Libraries that yt-dlp and CustomTkinter use, bundled with them:
 
 ## FFmpeg
 
-The FFmpeg 7.1 programs come from the imageio-ffmpeg 0.6.0 wheels on PyPI.
+The FFmpeg programs come from the imageio-ffmpeg 0.8.1 wheels on PyPI.
 imageio-ffmpeg is only the package they come in: a small Python library that
 ships an FFmpeg program and tells Vortex where to find it. That's why FFmpeg
-and imageio-ffmpeg are listed separately, each with its own license. The
-Windows app contains one FFmpeg program. The macOS app contains two, one for
-Apple Silicon and one for Intel Macs (see `vendor/fetch-x86_64-ffmpeg.sh`).
+and imageio-ffmpeg are listed separately, each with its own license.
 
-The programs are built with `--enable-gpl` (and include libx264 and libx265),
-so FFmpeg in Vortex is licensed under the GNU General Public License. The
-Windows program is the 7.1 "essentials" build from
-[gyan.dev](https://www.gyan.dev/ffmpeg/builds/), also built with
-`--enable-version3`, which makes it GPL version 3. Vortex runs FFmpeg as a
+The Windows app contains one FFmpeg program: on Intel and AMD processors the
+9.0.2 "essentials" build from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/),
+on ARM processors the 9.0.1 build from
+[BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds). The macOS app
+contains two: 9.0 from [osxexperts.net](https://www.osxexperts.net) for Apple
+Silicon, and 9.0.2 from [evermeet.cx](https://evermeet.cx/ffmpeg/) for Intel
+Macs (see `vendor/fetch-x86_64-ffmpeg.sh`). imageio-ffmpeg lists where each
+one comes from in its
+[ffmpeg-sources.json](https://github.com/imageio/imageio-ffmpeg/blob/main/tools/ffmpeg-sources.json).
+
+All of them are built with `--enable-gpl` (and include libx264 and libx265),
+so FFmpeg in Vortex is licensed under the GNU General Public License. The two
+Windows programs and the Intel Mac program are also built with
+`--enable-version3`, which makes them GPL version 3. Vortex runs FFmpeg as a
 separate program and does not link to it.
 
 To see the exact build configuration of a bundled program, run it with
-`-version`. The FFmpeg 7.1 source code is at
-https://ffmpeg.org/releases/ffmpeg-7.1.tar.xz and the license terms at
-https://ffmpeg.org/legal.html.
+`-version`. The FFmpeg source code is at
+https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz (and
+[9.0.1](https://ffmpeg.org/releases/ffmpeg-9.0.1.tar.xz),
+[9.0](https://ffmpeg.org/releases/ffmpeg-9.0.tar.xz)), and the license terms
+at https://ffmpeg.org/legal.html.
 
 ## mutagen
 
