@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.3
 
 - Fixed: Convert froze on Windows when the window was moved or switched.
   The conversion now runs without touching the window, which only checks

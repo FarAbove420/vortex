@@ -3,7 +3,7 @@
 ; Or open Vortex.iss in the Inno Setup GUI and press Compile.
 
 #define MyAppName       "Vortex"
-#define MyAppVersion    "0.3.2"
+#define MyAppVersion    "0.3.3"
 #define MyAppPublisher  "FarAbove420"
 #define MyAppExeName    "Vortex.exe"
 
