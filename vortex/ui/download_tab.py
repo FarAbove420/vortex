@@ -4,7 +4,8 @@ from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
-from ..media import Item, AUDIO_FORMATS, cli_to_opts, download_args, final_exts
+from ..media import (Item, AUDIO_LABELS, KIND_LABELS, QUALITY_LABELS, key_for,
+                     cli_to_opts, download_args, final_exts)
 from ..ytdl import YT_DLP_OK
 from ..system import open_path
 from .theme import (BG, ACCENT, TEXT_DIM, lbl, card, fancy_entry, dropdown, ghost_btn, accent_btn, progress_bar, checkbox, hide)
@@ -24,7 +25,7 @@ class DownloadTab(ctk.CTkFrame):
         hdr = ctk.CTkFrame(self, fg_color="transparent")
         hdr.grid(row=0, column=0, sticky="ew", padx=32, pady=(30, 0))
         lbl(hdr, "Advanced download", size=28, weight="bold").pack(side="left")
-        lbl(hdr, "Paste a URL and configure your download", size=13, color=TEXT_DIM).pack(
+        lbl(hdr, "Every option, for when the Home buttons are not enough", size=13, color=TEXT_DIM).pack(
             side="left", padx=(14, 0), pady=(10, 0)
         )
 
@@ -57,9 +58,10 @@ class DownloadTab(ctk.CTkFrame):
         opts_frame.grid(row=1, column=0, padx=22, pady=(0, 14), sticky="ew")
         opts_frame.grid_columnconfigure(3, weight=1)
 
-        self.type_var  = ctk.StringVar(value="Audio Only")
-        self.qual_var  = ctk.StringVar(value="Best")
-        self.afmt_var  = ctk.StringVar(value=self.app.settings.get("default_audio_format", "mp3").upper())
+        afmt = str(self.app.settings.get("default_audio_format", "mp3")).upper()
+        self.type_var  = ctk.StringVar(value=KIND_LABELS["Audio Only"])
+        self.qual_var  = ctk.StringVar(value=QUALITY_LABELS["Best"])
+        self.afmt_var  = ctk.StringVar(value=AUDIO_LABELS.get(afmt, AUDIO_LABELS["MP3"]))
 
         def opt_col(parent, label_text, var, values, width, on_change=None):
             c = ctk.CTkFrame(parent, fg_color="transparent")
@@ -67,17 +69,17 @@ class DownloadTab(ctk.CTkFrame):
             dropdown(c, values, width=width, variable=var, command=on_change).pack()
             return c
 
-        type_col = opt_col(opts_frame, "Type", self.type_var,
-                           ["Video + Audio", "Video Only", "Audio Only"], 148,
+        type_col = opt_col(opts_frame, "What to download", self.type_var,
+                           list(KIND_LABELS.values()), 190,
                            on_change=self._on_type_change)
         type_col.grid(row=0, column=0, padx=(0, 22), sticky="w")
 
-        self.qual_col = opt_col(opts_frame, "Quality", self.qual_var,
-                                ["Best", "4K", "1440p", "1080p", "720p", "480p", "360p"], 120)
+        self.qual_col = opt_col(opts_frame, "Quality (better = bigger file)", self.qual_var,
+                                list(QUALITY_LABELS.values()), 250)
         self.qual_col.grid(row=0, column=1, padx=(0, 22), sticky="w")
 
-        self.afmt_col = opt_col(opts_frame, "Audio Format", self.afmt_var,
-                                self.AUDIO_FORMATS, 110)
+        self.afmt_col = opt_col(opts_frame, "Audio format", self.afmt_var,
+                                list(AUDIO_LABELS.values()), 280)
         self.afmt_col.grid(row=0, column=2, padx=(0, 22), sticky="w")
 
         # Save-to (always visible)
@@ -106,17 +108,17 @@ class DownloadTab(ctk.CTkFrame):
         self.playlist_var = ctk.BooleanVar(value=False)
         self.sb_var       = ctk.BooleanVar(value=False)
 
-        self.subs_cb     = checkbox(cb_row, "Embed subtitles",   self.subs_var)
+        self.subs_cb     = checkbox(cb_row, "Add subtitles",     self.subs_var)
         self.thumb_cb    = checkbox(cb_row, "Embed thumbnail / cover", self.thumb_var)
         self.mp4_cb      = checkbox(cb_row, "Prefer MP4 (plays everywhere)", self.mp4_var)
         self.playlist_cb = checkbox(cb_row, "Download playlist", self.playlist_var)
-        self.sb_cb       = checkbox(cb_row, "SponsorBlock",      self.sb_var)
+        self.sb_cb       = checkbox(cb_row, "Cut out sponsor segments (SponsorBlock)", self.sb_var)
 
         self.subs_cb.grid(    row=0, column=0, padx=(0, 22), sticky="w")
         self.thumb_cb.grid(   row=0, column=1, padx=(0, 22), sticky="w")
         self.playlist_cb.grid(row=0, column=2, padx=(0, 22), sticky="w")
-        self.sb_cb.grid(      row=0, column=3, padx=(0, 22), sticky="w")
-        self.mp4_cb.grid(     row=0, column=4,               sticky="w")
+        self.sb_cb.grid(      row=1, column=0, columnspan=2, padx=(0, 22), pady=(8, 0), sticky="w")
+        self.mp4_cb.grid(     row=1, column=2, columnspan=2, pady=(8, 0), sticky="w")
 
         # Extra args toggle
         extra_toggle_row = ctk.CTkFrame(url_card, fg_color="transparent")
@@ -192,7 +194,7 @@ class DownloadTab(ctk.CTkFrame):
 
     # ── Reactivity ────────────────────────────────────────────────────────────
     def _on_type_change(self, value: str):
-        is_audio = value == "Audio Only"
+        is_audio = key_for(value, KIND_LABELS) == "Audio Only"
         if is_audio:
             hide(self.qual_col)
             self.afmt_col.grid()
@@ -234,18 +236,18 @@ class DownloadTab(ctk.CTkFrame):
         self.dir_entry.delete(0, "end")
         self.dir_entry.insert(0, s.get("download_dir", ""))
         afmt = str(s.get("default_audio_format", "mp3")).upper()
-        if afmt in self.AUDIO_FORMATS:
-            self.afmt_var.set(afmt)
+        if afmt in AUDIO_LABELS:
+            self.afmt_var.set(AUDIO_LABELS[afmt])
         self.subs_var.set(bool(s.get("embed_subs", False)))
         self.thumb_var.set(bool(s.get("embed_thumbnail", True)))
         self.mp4_var.set(bool(s.get("prefer_mp4", True)))
 
-    AUDIO_FORMATS = AUDIO_FORMATS
 
     def _choices(self) -> dict:
-        t = self.type_var.get()
+        t = key_for(self.type_var.get(), KIND_LABELS)
         return dict(
-            kind=t, quality=self.qual_var.get(), audio_format=self.afmt_var.get(),
+            kind=t, quality=key_for(self.qual_var.get(), QUALITY_LABELS),
+            audio_format=key_for(self.afmt_var.get(), AUDIO_LABELS),
             folder=self.dir_entry.get().strip() or self.app.settings["download_dir"],
             embed_thumbnail=self.thumb_var.get(), embed_subs=self.subs_var.get(),
             prefer_mp4=self.mp4_var.get(), playlist=self.playlist_var.get(),

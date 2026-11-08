@@ -5,7 +5,7 @@ import customtkinter as ctk
 
 from .. import updater
 from ..config import save_settings, TEXT_SIZES
-from ..media import AUDIO_FORMATS
+from ..media import AUDIO_LABELS, key_for
 from ..ytdl import YT_DLP_VERSION, using_downloaded
 from .theme import (BG, CARD_HOVER, TEXT_DIM, SUCCESS, BORDER, lbl, card, fancy_entry, dropdown, ghost_btn, accent_btn, checkbox)
 
@@ -59,8 +59,9 @@ class SettingsTab(ctk.CTkFrame):
         ghost_btn(c, "...", self._browse, width=40, height=40).grid(row=0, column=2, padx=(8, 22), pady=(14, 6))
 
         self._row(c, 1, "Song format", "Used by the Song button and as the advanced default")
-        self.afmt_var = ctk.StringVar(value=str(s.get("default_audio_format", "mp3")).upper())
-        dropdown(c, AUDIO_FORMATS, width=120, variable=self.afmt_var).grid(row=1, column=1, sticky="w")
+        afmt = str(s.get("default_audio_format", "mp3")).upper()
+        self.afmt_var = ctk.StringVar(value=AUDIO_LABELS.get(afmt, AUDIO_LABELS["MP3"]))
+        dropdown(c, list(AUDIO_LABELS.values()), width=300, variable=self.afmt_var).grid(row=1, column=1, sticky="w")
         self._check(c, 2, "embed_thumbnail", "Add cover art and the video thumbnail to files")
         self._check(c, 3, "prefer_mp4", "Prefer MP4 for videos, so they play on any device")
         self._check(c, 4, "embed_subs", "Embed subtitles in videos (advanced tab)")
@@ -121,7 +122,7 @@ class SettingsTab(ctk.CTkFrame):
     def _save(self):
         s = self.app.settings
         s["download_dir"] = self.dir_entry.get().strip() or s["download_dir"]
-        s["default_audio_format"] = self.afmt_var.get().lower()
+        s["default_audio_format"] = key_for(self.afmt_var.get(), AUDIO_LABELS).lower()
         s["ffmpeg_path"] = self.ffmpeg_entry.get().strip() or "ffmpeg"
         size_changed = s.get("text_size") != self.size_var.get()
         s["text_size"] = self.size_var.get()

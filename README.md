@@ -46,7 +46,9 @@ The rest:
 - **History**: everything downloaded before, also after a restart
 - **Settings**: download folder, song format, text size, notifications and
   updates
-- **Convert**: change local files to another format, change codecs and trim
+- **Convert**: change a local file to another format, make it smaller, or cut
+  out a part. Quality is explained as quality versus file size, and the
+  progress says what it's doing, how fast, and how long is left
 - **Advanced** (switch it on in Settings, a tip on Home points there): every
   quality and format option, subtitles, SponsorBlock and extra yt-dlp flags
 
@@ -97,6 +99,9 @@ Settings, history, a log file, the downloaded yt-dlp and Deno are stored in
   (for example to MP3), it can't be cancelled anymore.
 - **Playlists** can still overwrite a file with the same name; the "Title (2)"
   check only covers single videos.
+- **Windows on ARM** (Snapdragon laptops): the Windows build is for Intel and
+  AMD processors, so Windows emulates it. Converting video is a lot slower
+  there.
 - **Notifications** on Windows flash the taskbar button instead of showing a
   banner.
 - **Drag and drop** isn't supported. Copying a link works instead.

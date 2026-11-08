@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: Convert froze on Windows when the window was moved or switched.
+  The conversion now runs without touching the window, which only checks
+  progress four times a second
+- Convert shows what it's doing (copying or re-encoding), the speed, time
+  left, and why it's slow on a slow computer; it can be cancelled
+- Plain-language choices everywhere: quality is explained as quality versus
+  file size, formats say what they're good for, and codec and trimming moved
+  under "More options"
+- Faster encoder settings, and Small and Smallest also lower the resolution
+- Convert asks before replacing a file and won't overwrite the original
+
 ## 0.3.2
 
 Windows fixes:

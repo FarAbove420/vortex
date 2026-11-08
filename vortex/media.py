@@ -35,6 +35,36 @@ def find_ffmpeg(configured: str = "") -> str:
 
 # ── Turning choices into yt-dlp options ───────────────────────────────────────
 AUDIO_FORMATS = ["MP3", "M4A", "FLAC", "WAV", "OPUS", "AAC"]
+# The same choices in plain words, for dropdowns: key -> label
+KIND_LABELS = {
+    "Video + Audio": "Video with sound",
+    "Video Only":    "Video without sound",
+    "Audio Only":    "Audio only (music)",
+}
+QUALITY_LABELS = {
+    "Best":  "Best available · biggest file",
+    "4K":    "4K · huge files",
+    "1440p": "1440p · very big files",
+    "1080p": "1080p Full HD · big files",
+    "720p":  "720p HD · medium size",
+    "480p":  "480p · small files",
+    "360p":  "360p · smallest files",
+}
+AUDIO_LABELS = {
+    "MP3":  "MP3 · plays everywhere",
+    "M4A":  "M4A · Apple, a bit better than MP3",
+    "OPUS": "OPUS · small and good, not every player",
+    "AAC":  "AAC · like M4A",
+    "FLAC": "FLAC · perfect quality, big files",
+    "WAV":  "WAV · uncompressed, very big files",
+}
+
+
+def key_for(label: str, labels: dict) -> str:
+    """Dropdown label back to its key (keys pass through unchanged)."""
+    return next((k for k, v in labels.items() if v == label), label)
+
+
 # File extension yt-dlp's FFmpegExtractAudio produces per --audio-format
 AUDIO_EXT = {"mp3": "mp3", "m4a": "m4a", "flac": "flac", "wav": "wav", "opus": "opus", "aac": "m4a"}
 # Formats yt-dlp can embed cover art in (EmbedThumbnailPP)
