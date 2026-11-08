@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.4
+
+- Home only picks up a copied link when yt-dlp supports the site (YouTube,
+  SoundCloud, ...); copying another web page no longer shows "Unsupported
+  URL" when you switch to Vortex
+- Convert: the codec list only shows codecs the chosen format can hold (WEBM
+  offers VP9 and AV1), each format says what it means for the file size,
+  the original file's resolution, length and size are shown, and so is the
+  result's size where it's known (audio, and "Keep original")
+- FLAC is saved in CD quality (16-bit), about half the size it was; WEBM
+  comes out smaller than MP4 as its label says
+
 ## 0.3.3
 
 - Fixed: Convert froze on Windows when the window was moved or switched.

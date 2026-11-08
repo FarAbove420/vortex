@@ -9,8 +9,9 @@ from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 
-from ..convert import (FORMATS, VIDEO_QUALITY, AUDIO_QUALITY, CODECS, LOSSLESS_NOTE,
-                       ConvertChoices, ConvertJob, parse_time, run_convert)
+from ..convert import (FORMATS, VIDEO_QUALITY, AUDIO_QUALITY, CODECS, FORMAT_CODECS, LOSSLESS_NOTE,
+                       ConvertChoices, ConvertJob, MediaInfo, estimate_size, parse_time, probe,
+                       run_convert)
 from ..media import find_ffmpeg
 from ..system import open_path, reveal_in_folder
 from .theme import (BG, SURFACE, ACCENT, TEXT_DIM, SUCCESS, ERROR, WARNING,
@@ -31,6 +32,11 @@ def _minutes(sec: float) -> str:
     if sec < 3600:
         return f"{round(sec / 60)} min"
     return f"{sec // 3600} h {round(sec % 3600 / 60)} min"
+
+
+def _mb(size: float) -> str:
+    mb = size / 1_000_000
+    return f"{mb:.1f} MB" if mb < 10 else f"{mb:.0f} MB" if mb < 1000 else f"{mb / 1000:.1f} GB"
 
 
 class ConvertTab(ctk.CTkFrame):
@@ -67,50 +73,59 @@ class ConvertTab(ctk.CTkFrame):
         c.grid_columnconfigure(1, weight=1)
         c.grid_columnconfigure(0, minsize=200)
 
-        # File
+        # File, with what's in it once picked
         self._label(c, 0, "File")
         row = ctk.CTkFrame(c, fg_color="transparent")
-        row.grid(row=0, column=1, sticky="ew", padx=(0, 22), pady=(14, 4))
+        row.grid(row=0, column=1, sticky="ew", padx=(0, 22), pady=(14, 0))
         row.grid_columnconfigure(0, weight=1)
         self.in_entry = fancy_entry(row, "Pick a video or audio file", height=40)
         self.in_entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        self.in_entry.bind("<FocusOut>", lambda _e: self.in_entry.get().strip() != getattr(self, "_info_path", "")
+                           and self._probe_file(), add="+")
+        self.in_entry.bind("<Return>", lambda _e: self._probe_file(), add="+")
         ghost_btn(row, "Browse", self._browse_in, width=88, height=40).grid(row=0, column=1)
+        self.file_note = lbl(c, "", size=12, color=TEXT_DIM, anchor="w")
+        self.file_note.grid(row=1, column=1, sticky="w", pady=(6, 0))
 
-        # Format
-        self._label(c, 1, "Convert to")
+        # Format, with what it's good for and what it means for the size
+        self._label(c, 2, "Convert to")
         self.fmt_var = ctk.StringVar(value=FORMATS["MP4"][0])
-        dropdown(c, [v[0] for v in FORMATS.values()], width=340, variable=self.fmt_var,
-                 command=lambda _v: self._on_change()).grid(row=1, column=1, sticky="w", pady=(14, 4))
+        dropdown(c, [v[0] for v in FORMATS.values()], width=420, variable=self.fmt_var,
+                 command=lambda _v: self._on_change()).grid(row=2, column=1, sticky="w", pady=(14, 0))
+        self.fmt_note = lbl(c, "", size=12, color=TEXT_DIM, anchor="w", justify="left", wraplength=560)
+        self.fmt_note.grid(row=3, column=1, sticky="w", padx=(0, 22), pady=(6, 0))
 
-        # Quality, with an explanation of the current choice
-        self._label(c, 2, "Quality", "Better quality means a bigger file")
+        # Quality, with an explanation and the expected file size
+        self._label(c, 4, "Quality", "Better quality means a bigger file")
         self.vq_var = ctk.StringVar(value=VIDEO_QUALITY["keep"][0])
         self.aq_var = ctk.StringVar(value=AUDIO_QUALITY["standard"][0])
         self.vq_menu = dropdown(c, [v[0] for v in VIDEO_QUALITY.values()], width=340,
                                 variable=self.vq_var, command=lambda _v: self._on_change())
         self.aq_menu = dropdown(c, [v[0] for v in AUDIO_QUALITY.values()], width=340,
                                 variable=self.aq_var, command=lambda _v: self._on_change())
-        self.vq_menu.grid(row=2, column=1, sticky="w", pady=(14, 0))
-        self.aq_menu.grid(row=2, column=1, sticky="w", pady=(14, 0))
+        self.vq_menu.grid(row=4, column=1, sticky="w", pady=(14, 0))
+        self.aq_menu.grid(row=4, column=1, sticky="w", pady=(14, 0))
         self.q_note = lbl(c, "", size=12, color=TEXT_DIM, anchor="w", justify="left", wraplength=560)
-        self.q_note.grid(row=3, column=1, sticky="w", padx=(0, 22), pady=(6, 4))
+        self.q_note.grid(row=5, column=1, sticky="w", padx=(0, 22), pady=(6, 0))
+        self.size_note = lbl(c, "", size=12, weight="bold", color=ACCENT, anchor="w", justify="left", wraplength=560)
+        self.size_note.grid(row=6, column=1, sticky="w", padx=(0, 22), pady=(6, 4))
 
         # More options: codec and trimming
         self.more_var = ctk.BooleanVar(value=False)
         checkbox(c, "More options (video codec, cut out a part)", self.more_var,
-                 command=self._on_change).grid(row=4, column=1, sticky="w", pady=(10, 4))
+                 command=self._on_change).grid(row=7, column=1, sticky="w", pady=(10, 4))
         self.more = ctk.CTkFrame(c, fg_color=SURFACE, corner_radius=10)
-        self.more.grid(row=5, column=0, columnspan=2, sticky="ew", padx=22, pady=(4, 6))
+        self.more.grid(row=8, column=0, columnspan=2, sticky="ew", padx=22, pady=(4, 6))
         self.more.grid_columnconfigure(1, weight=1)
         codec_lbl = lbl(self.more, "Video codec", size=12, weight="bold")
         codec_lbl.grid(row=0, column=0, sticky="w", padx=14, pady=(12, 0))
-        self.codec_var = ctk.StringVar(value=CODECS["auto"][0])
-        codec_menu = dropdown(self.more, [v[0] for v in CODECS.values()], width=260, variable=self.codec_var,
-                              command=lambda _v: self._on_change())
-        codec_menu.grid(row=0, column=1, sticky="w", pady=(12, 0))
+        self.codec_var = ctk.StringVar(value=CODECS["h264"][0])
+        self.codec_menu = dropdown(self.more, [CODECS["h264"][0]], width=260, variable=self.codec_var,
+                                   command=lambda _v: self._on_change())
+        self.codec_menu.grid(row=0, column=1, sticky="w", pady=(12, 0))
         self.codec_note = lbl(self.more, "", size=11, color=TEXT_DIM, anchor="w", justify="left", wraplength=520)
         self.codec_note.grid(row=1, column=1, sticky="w", pady=(4, 6))
-        self._codec_widgets = [codec_lbl, codec_menu, self.codec_note]   # only for video
+        self._codec_widgets = [codec_lbl, self.codec_menu, self.codec_note]   # only for video
         lbl(self.more, "Cut out a part", size=12, weight="bold").grid(row=2, column=0, sticky="w", padx=14, pady=(6, 12))
         trim = ctk.CTkFrame(self.more, fg_color="transparent")
         trim.grid(row=2, column=1, sticky="w", pady=(6, 12))
@@ -121,18 +136,20 @@ class ConvertTab(ctk.CTkFrame):
         self.trim_end = fancy_entry(trim, "the end", height=34, width=90)
         self.trim_end.pack(side="left", padx=8)
         lbl(trim, "like 1:30 or 0:01:30", size=11, color=TEXT_DIM).pack(side="left", padx=(6, 0))
+        for e in (self.trim_start, self.trim_end):
+            e.bind("<KeyRelease>", lambda _e: self._update_estimate(), add="+")
 
         # Output
-        self._label(c, 6, "Save as")
+        self._label(c, 9, "Save as")
         row = ctk.CTkFrame(c, fg_color="transparent")
-        row.grid(row=6, column=1, sticky="ew", padx=(0, 22), pady=(14, 4))
+        row.grid(row=9, column=1, sticky="ew", padx=(0, 22), pady=(14, 4))
         row.grid_columnconfigure(0, weight=1)
         self.out_entry = fancy_entry(row, "Filled in when you pick a file", height=40)
         self.out_entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
         ghost_btn(row, "Browse", self._browse_out, width=88, height=40).grid(row=0, column=1)
 
         btns = ctk.CTkFrame(c, fg_color="transparent")
-        btns.grid(row=7, column=1, sticky="w", pady=(14, 22))
+        btns.grid(row=10, column=1, sticky="w", pady=(14, 22))
         self.convert_btn = accent_btn(btns, "  ⇄  Convert", self._convert, width=190, height=50)
         self.convert_btn.pack(side="left")
         self.cancel_btn = ghost_btn(btns, "Cancel", self._cancel, width=100, height=50)
@@ -167,6 +184,7 @@ class ConvertTab(ctk.CTkFrame):
     def _on_change(self):
         fmt = self._fmt()
         is_audio = FORMATS[fmt][1] == "audio"
+        self.fmt_note.configure(text=FORMATS[fmt][2])
         if is_audio:
             hide(self.vq_menu)
             if fmt in ("MP3", "M4A"):
@@ -179,9 +197,21 @@ class ConvertTab(ctk.CTkFrame):
             hide(self.aq_menu)
             self.vq_menu.grid()
             self.q_note.configure(text=VIDEO_QUALITY[_key_for(self.vq_var.get(), VIDEO_QUALITY)][1])
+
+        # Only the codecs this format can hold; the first is the usual one
+        if not is_audio:
+            labels = [CODECS[k][0] for k in FORMAT_CODECS[fmt]]
+            self.codec_menu.configure(values=labels, state="normal" if len(labels) > 1 else "disabled")
+            if self.codec_var.get() not in labels:
+                self.codec_var.set(labels[0])
+            codec = _key_for(self.codec_var.get(), CODECS)
+            note = CODECS[codec][1]
+            if len(labels) == 1:
+                note = f"{fmt} only uses {labels[0].split(' ·')[0]}. " + note
+            if _key_for(self.vq_var.get(), VIDEO_QUALITY) == "keep":
+                note += " Only used when the video is re-encoded, so not with \"Keep original\"."
+            self.codec_note.configure(text=note)
         show_codec = self.more_var.get() and not is_audio
-        codec = _key_for(self.codec_var.get(), CODECS)
-        self.codec_note.configure(text=CODECS[codec][1])
         if self.more_var.get():
             self.more.grid()
         else:
@@ -194,6 +224,74 @@ class ConvertTab(ctk.CTkFrame):
         # keep an auto-filled output name in step with the format
         if self._auto_out and self.out_entry.get().strip() == self._auto_out:
             self._fill_out(self.in_entry.get().strip())
+        self._update_estimate()
+
+    # ── What's in the file, and how big the result will be ────────────────────
+    def _probe_file(self):
+        path = self.in_entry.get().strip()
+        self._info, self._info_path = None, path
+        if not path or not Path(path).is_file():
+            self.file_note.configure(text="")
+            self._update_estimate()
+            return
+        self.file_note.configure(text="Reading the file...")
+        box = {}
+        ffmpeg = find_ffmpeg(self.app.settings.get("ffmpeg_path", ""))
+        t = threading.Thread(target=lambda: box.update(info=probe(ffmpeg, path)), daemon=True)
+        t.start()
+
+        def poll():
+            if self._info_path != path:
+                return          # another file was picked meanwhile
+            if t.is_alive():
+                self.after(100, poll)
+                return
+            info = box.get("info") or MediaInfo()
+            self._info = info
+            parts = []
+            if info.height:
+                parts.append(f"{info.height}p video")
+            elif info.acodec:
+                parts.append("audio")
+            if info.duration:
+                parts.append(_minutes(info.duration))
+            parts.append(_mb(Path(path).stat().st_size))
+            self.file_note.configure(text="Original: " + "  ·  ".join(parts))
+            self._update_estimate()
+        poll()
+
+    def _choices(self, strict: bool = False) -> ConvertChoices:
+        """The choices as they are in the window. strict: raise ValueError for
+        a time that can't be read, instead of ignoring it."""
+        start = end = None
+        if self.more_var.get():
+            try:
+                start, end = parse_time(self.trim_start.get()), parse_time(self.trim_end.get())
+            except ValueError:
+                if strict:
+                    raise
+        return ConvertChoices(
+            fmt=self._fmt(),
+            video_quality=_key_for(self.vq_var.get(), VIDEO_QUALITY),
+            audio_quality=_key_for(self.aq_var.get(), AUDIO_QUALITY),
+            codec=_key_for(self.codec_var.get(), CODECS) if self.more_var.get() else "auto",
+            start=start, end=end)
+
+    def _update_estimate(self):
+        info = getattr(self, "_info", None)
+        path = self.in_entry.get().strip()
+        if not info or not info.duration or not Path(path).is_file():
+            self.size_note.configure(text="")
+            return
+        try:
+            est = estimate_size(info, Path(path).stat().st_size, self._choices())
+        except (ValueError, KeyError):
+            est = None
+        if not est:
+            self.size_note.configure(text="")
+            return
+        text = f"Expected size: about {_mb(est)}"
+        self.size_note.configure(text=text)
 
     def _fill_out(self, inp: str):
         if not inp:
@@ -210,6 +308,7 @@ class ConvertTab(ctk.CTkFrame):
             self.in_entry.delete(0, "end")
             self.in_entry.insert(0, path)
             self._fill_out(path)
+            self._probe_file()
 
     def _browse_out(self):
         path = filedialog.asksaveasfilename(defaultextension=f".{self._fmt().lower()}")
@@ -232,18 +331,11 @@ class ConvertTab(ctk.CTkFrame):
         if Path(out).exists() and not messagebox.askyesno("Convert", f"{Path(out).name} already exists. Replace it?"):
             return
         try:
-            start = parse_time(self.trim_start.get()) if self.more_var.get() else None
-            end = parse_time(self.trim_end.get()) if self.more_var.get() else None
+            # Everything the worker needs is read here, on the main thread
+            choices = self._choices(strict=True)
         except ValueError as e:
             messagebox.showwarning("Convert", str(e))
             return
-        # Everything the worker needs is read here, on the main thread
-        choices = ConvertChoices(
-            fmt=self._fmt(),
-            video_quality=_key_for(self.vq_var.get(), VIDEO_QUALITY),
-            audio_quality=_key_for(self.aq_var.get(), AUDIO_QUALITY),
-            codec=_key_for(self.codec_var.get(), CODECS) if self.more_var.get() else "auto",
-            start=start, end=end)
         self.job = ConvertJob(inp, out, choices, ffmpeg=find_ffmpeg(self.app.settings.get("ffmpeg_path", "")))
         threading.Thread(target=run_convert, args=(self.job,), daemon=True).start()
         self.convert_btn.configure(state="disabled")
@@ -300,7 +392,7 @@ class ConvertTab(ctk.CTkFrame):
                 pct = size / before * 100
                 change = f"  ·  {pct:.0f}% of the original size"
             self.p_status.configure(
-                text=f"Done in {_minutes(job.elapsed)}  ·  {size / 1024 / 1024:.1f} MB{change}", text_color=SUCCESS)
+                text=f"Done in {_minutes(job.elapsed)}  ·  {_mb(size)}{change}", text_color=SUCCESS)
             self.open_btn.pack(side="left", padx=(0, 8))
             self.folder_btn.pack(side="left")
             self.acts.grid()

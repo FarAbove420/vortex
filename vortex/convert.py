@@ -16,26 +16,46 @@ from pathlib import Path
 from .config import SUBPROCESS_FLAGS, log
 
 # ── Choices, in plain words ───────────────────────────────────────────────────
-# Output formats: key -> (label shown in the dropdown, kind)
+# Output formats: key -> (label shown in the dropdown, kind, explanation)
+# For video the format is only the container: the file size comes from the
+# codec and the Quality setting, which the explanations say.
 FORMATS = {
-    "MP4":  ("MP4 video · plays everywhere", "video"),
-    "MOV":  ("MOV video · Apple, iMovie", "video"),
-    "MKV":  ("MKV video · keeps subtitles and extra audio", "video"),
-    "WEBM": ("WEBM video · for websites", "video"),
-    "AVI":  ("AVI video · very old players", "video"),
-    "MP3":  ("MP3 audio · music, plays everywhere", "audio"),
-    "M4A":  ("M4A audio · music, Apple", "audio"),
-    "FLAC": ("FLAC audio · perfect quality, big files", "audio"),
-    "WAV":  ("WAV audio · uncompressed, very big files", "audio"),
+    "MP4":  ("MP4 video · plays everywhere · normal size", "video",
+             "The format plays on any phone, TV or computer. For video, the format barely "
+             "changes the size: the Quality setting below decides it."),
+    "MOV":  ("MOV video · Apple, iMovie · same size as MP4", "video",
+             "Apple's format, handy for iMovie and Final Cut. About the same size as MP4: "
+             "the Quality setting below decides it."),
+    "MKV":  ("MKV video · subtitles, extra audio · same size as MP4", "video",
+             "Holds anything, including several audio tracks and subtitles. About the same "
+             "size as MP4. Not every TV or phone plays it."),
+    "WEBM": ("WEBM video · for websites · smaller than MP4", "video",
+             "Made for websites. It uses VP9 or AV1, which give smaller files than MP4's "
+             "usual H.264 at the same quality, but take longer to make."),
+    "AVI":  ("AVI video · very old players · same size as MP4", "video",
+             "Only for very old players. Uses H.264 and is about the same size as MP4."),
+    "MP3":  ("MP3 audio · plays everywhere · about 1.4 MB per minute", "audio",
+             "Music that plays everywhere. About 1 to 2.4 MB per minute, depending on the "
+             "quality below."),
+    "M4A":  ("M4A audio · Apple · same size as MP3", "audio",
+             "Apple's music format. The same size as MP3 at the same quality, and sounds a "
+             "little better."),
+    "FLAC": ("FLAC audio · perfect quality · about 4× an MP3", "audio",
+             "Perfect quality without any loss. Roughly 5 MB per minute, about 4 times an "
+             "MP3."),
+    "WAV":  ("WAV audio · uncompressed · about 7× an MP3", "audio",
+             "Uncompressed, for editing programs. About 10 MB per minute, about 7 times an "
+             "MP3."),
 }
 
 # Video quality: key -> (label, explanation shown under the dropdown)
 VIDEO_QUALITY = {
     "keep":     ("Keep original · fastest",
-                 "Copies the video as it is: no quality loss, about the same size, done in seconds. "
+                 "Copies the video as it is: no quality loss, the same size, done in seconds. "
                  "If the new format can't hold the original video, it's re-encoded at Balanced."),
     "high":     ("High quality · big file",
-                 "Looks like the original. The file stays big. Re-encoding takes a while."),
+                 "Looks like the original. The file often stays as big as the original. "
+                 "Re-encoding takes a while."),
     "balanced": ("Balanced · good quality, medium size",
                  "Hard to tell apart from the original, usually a lot smaller. A good default."),
     "small":    ("Small file · for sharing",
@@ -54,16 +74,25 @@ AUDIO_QUALITY = {
                  "Fine for speech and podcasts, a bit flat for music.", "128k"),
 }
 
-LOSSLESS_NOTE = "Perfect quality: there's nothing to choose. Files are big (FLAC) or very big (WAV)."
+LOSSLESS_NOTE = "Perfect quality: there's nothing to choose."
 
 # Video codec in the "More options" part: key -> (label, explanation)
 CODECS = {
-    "auto": ("Automatic", "H.264, or VP9 for WEBM."),
     "h264": ("H.264 · plays everywhere", "The safe choice for any phone, TV or computer."),
-    "h265": ("H.265 · about half the size", "Same quality in a smaller file, but slower to make "
+    "h265": ("H.265 · up to half the size", "Same quality in a smaller file, but slower to make, "
                                             "and older devices may not play it."),
-    "av1":  ("AV1 · smallest, newest", "The smallest files, but slow to make and only newer "
+    "vp9":  ("VP9 · smaller, for websites", "Smaller than H.264 at the same quality. Plays in "
+                                            "browsers and on Android, not on older Apple devices."),
+    "av1":  ("AV1 · smallest, newest", "The smallest files, but slow to make, and only newer "
                                        "devices play it."),
+}
+# Which codecs each video format can hold; the first one is the automatic choice
+FORMAT_CODECS = {
+    "MP4":  ["h264", "h265", "av1"],
+    "MOV":  ["h264", "h265"],
+    "MKV":  ["h264", "h265", "vp9", "av1"],
+    "WEBM": ["vp9", "av1"],
+    "AVI":  ["h264"],
 }
 
 # Encoder settings per codec and quality: (encoder, constant-quality value, extra args)
@@ -71,7 +100,7 @@ _ENCODERS = {
     #          encoder        high balanced small smallest  extra
     "h264": ("libx264",     (18, 23, 27, 30), ["-preset", "veryfast"]),
     "h265": ("libx265",     (20, 26, 29, 32), ["-preset", "fast"]),
-    "vp9":  ("libvpx-vp9",  (24, 32, 37, 42), ["-b:v", "0", "-deadline", "good", "-cpu-used", "4", "-row-mt", "1"]),
+    "vp9":  ("libvpx-vp9",  (30, 37, 41, 45), ["-b:v", "0", "-deadline", "good", "-cpu-used", "4", "-row-mt", "1"]),
     "av1":  ("libsvtav1",   (24, 32, 38, 44), ["-preset", "8"]),
 }
 _QUALITY_INDEX = {"high": 0, "balanced": 1, "small": 2, "smallest": 3}
@@ -163,6 +192,8 @@ def build_command(ffmpeg: str, inp: str, out: str, c: ConvertChoices, info: Medi
 
     if FORMATS[c.fmt][1] == "audio":
         cmd += ["-vn", "-c:a", _AUDIO_ENCODER[c.fmt]]
+        if c.fmt == "FLAC":
+            cmd += ["-sample_fmt", "s16"]   # CD quality; otherwise 24-bit and twice the size
         if c.fmt in ("MP3", "M4A"):
             cmd += ["-b:a", AUDIO_QUALITY[c.audio_quality][2]]
         what = f"Converting the audio to {c.fmt}"
@@ -176,11 +207,7 @@ def build_command(ffmpeg: str, inp: str, out: str, c: ConvertChoices, info: Medi
         else:
             if quality == "keep":
                 quality = "balanced"   # the format can't hold the original video
-            codec = c.codec
-            if codec == "auto":
-                codec = "vp9" if c.fmt == "WEBM" else "h264"
-            if c.fmt == "WEBM" and codec not in ("vp9", "av1"):
-                codec = "vp9"          # WEBM only holds VP8/VP9/AV1
+            codec = c.codec if c.codec in FORMAT_CODECS[c.fmt] else FORMAT_CODECS[c.fmt][0]
             encoder, values, extra = _ENCODERS[codec]
             cmd += ["-c:v", encoder, "-crf", str(values[_QUALITY_INDEX[quality]])] + extra
             if quality in _MAX_HEIGHT and info.height > _MAX_HEIGHT[quality]:
@@ -201,6 +228,35 @@ def build_command(ffmpeg: str, inp: str, out: str, c: ConvertChoices, info: Medi
             cmd += ["-c:a", "libopus" if c.fmt == "WEBM" else "aac", "-b:a", "192k"]
     cmd += ["-progress", "pipe:1", "-nostats", "-y", out]
     return cmd, what
+
+
+# ── Expected size ─────────────────────────────────────────────────────────────
+# Only where it can be known: audio (bitrate x length) and video that's copied
+# as it is. A re-encoded video's size depends on what's in it, so no guess.
+_AUDIO_KBPS = {"WAV": 1411}
+
+
+def estimate_size(info: MediaInfo, original_bytes: int, c: ConvertChoices) -> int | None:
+    """Expected output size in bytes, or None when it can't be known."""
+    length = info.duration
+    if c.end:
+        length = float(c.end) - float(c.start or 0)
+    elif c.start and length:
+        length -= float(c.start)
+    if length <= 0:
+        return None
+    if FORMATS[c.fmt][1] == "audio":
+        if c.fmt in ("MP3", "M4A"):
+            kbps = int(AUDIO_QUALITY[c.audio_quality][2].rstrip("k"))
+        elif c.fmt in _AUDIO_KBPS:
+            kbps = _AUDIO_KBPS[c.fmt]
+        else:
+            return None   # FLAC depends on the music
+        return int(kbps * 1000 / 8 * length)
+    vok, _aok = _COPY_OK[c.fmt]
+    if c.video_quality == "keep" and (vok is None or info.vcodec in vok) and info.duration:
+        return int(original_bytes * min(length / info.duration, 1.0))
+    return None
 
 
 # ── Running it ────────────────────────────────────────────────────────────────

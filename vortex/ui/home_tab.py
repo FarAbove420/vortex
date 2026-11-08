@@ -8,7 +8,7 @@ import customtkinter as ctk
 
 from ..config import log
 from ..media import (Item, cli_to_opts, download_args, final_exts, fetch_preview, search,
-                     looks_like_url, best_thumbnail_url, thumbnail_png_b64)
+                     looks_like_url, is_supported_site, best_thumbnail_url, thumbnail_png_b64)
 from ..system import fmt_duration, open_path, reveal_in_folder
 from ..ytdl import YT_DLP_OK
 from .theme import (BG, CARD, CARD_HOVER, ACCENT_DK, TEXT_DIM, ERROR, lbl, card, fancy_entry, ghost_btn, accent_btn, progress_bar, hide)
@@ -112,7 +112,9 @@ class HomeTab(ctk.CTkFrame):
     # ── Clipboard ─────────────────────────────────────────────────────────────
     def check_clipboard(self):
         """Called when the window gets focus: a fresh link on the clipboard is
-        filled in and looked up, so it's one click from there."""
+        filled in and looked up, so it's one click from there. Only for sites
+        yt-dlp supports: other links (a web page, a GitHub link) are ignored
+        instead of showing "Unsupported URL"."""
         try:
             clip = self.clipboard_get().strip()
         except Exception:
@@ -120,6 +122,8 @@ class HomeTab(ctk.CTkFrame):
         if not looks_like_url(clip) or clip == self._last_clip:
             return
         self._last_clip = clip
+        if not is_supported_site(clip):
+            return
         current = self.entry.get().strip()
         if current and current != self.preview_url:
             return  # don't overwrite something the user is typing

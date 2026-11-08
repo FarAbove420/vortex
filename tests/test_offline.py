@@ -6,7 +6,8 @@ import pytest
 
 from vortex import history, updater
 from vortex.media import (build_format, cli_to_opts, download_args, extra_args_to_opts,
-                          final_exts, unique_template, looks_like_url, split_args)
+                          final_exts, unique_template, looks_like_url, split_args,
+                          is_supported_site)
 from vortex.ytdl import yt_dlp
 
 
@@ -76,6 +77,14 @@ def test_sponsorblock_removes_segments(tmp_path):
 def test_final_exts():
     assert final_exts("Audio Only", "AAC", True) == {"m4a"}
     assert final_exts("Video + Audio", "mp3", True) == {"mp4"}
+
+
+def test_clipboard_only_takes_supported_sites():
+    assert is_supported_site("https://www.youtube.com/watch?v=jNQXAC9IVRw")
+    assert is_supported_site("https://youtu.be/jNQXAC9IVRw")
+    assert is_supported_site("https://soundcloud.com/artist/track")
+    assert not is_supported_site("https://github.com/FarAbove420/vortex/releases")
+    assert not is_supported_site("https://www.google.com/search?q=vortex")
 
 
 def test_looks_like_url():

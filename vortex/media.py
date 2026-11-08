@@ -310,6 +310,24 @@ def looks_like_url(text: str) -> bool:
     return bool(re.match(r"^(https?://|www\.)\S+$", text.strip(), re.I))
 
 
+_SITE_EXTRACTORS = None
+
+
+def is_supported_site(url: str) -> bool:
+    """True when yt-dlp has an extractor made for this site (YouTube,
+    SoundCloud, ...). yt-dlp's "generic" extractor, which accepts any URL and
+    then often fails, doesn't count. Used for links picked up from the
+    clipboard, so copying a random web page doesn't show an error."""
+    global _SITE_EXTRACTORS
+    if _SITE_EXTRACTORS is None:
+        from yt_dlp.extractor import gen_extractor_classes
+        _SITE_EXTRACTORS = [ie for ie in gen_extractor_classes() if ie.ie_key() != "Generic"]
+    try:
+        return any(ie.suitable(url) for ie in _SITE_EXTRACTORS)
+    except Exception:
+        return False
+
+
 def fetch_preview(url: str) -> tuple[dict, bool]:
     """Info for one URL, and whether the download may reuse it.
 
