@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: Convert with the AV1 codec failed on Windows ("Encoder not found").
+  The Windows FFmpeg has no SVT-AV1, so Vortex uses libaom there; when an
+  FFmpeg can't make a codec at all, Convert says so in plain words
+
 ## 0.3.4
 
 - Home only picks up a copied link when yt-dlp supports the site (YouTube,

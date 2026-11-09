@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from vortex.convert import (ConvertChoices, ConvertJob, MediaInfo, build_command, parse_time,
-                            probe, run_convert)
+from vortex.convert import (ConvertChoices, ConvertJob, MediaInfo, build_command, encoders,
+                            parse_time, probe, run_convert)
 from vortex.media import find_ffmpeg
 
 FFMPEG = find_ffmpeg()
@@ -74,6 +74,37 @@ def test_trim_uses_length():
     assert cmd[cmd.index("-ss") + 1] == "60.0" and cmd[cmd.index("-t") + 1] == "30.0"
     with pytest.raises(ValueError):
         build_command("ffmpeg", "in", "out", ConvertChoices(start="30", end="10"), H264)
+
+
+def test_av1_uses_libaom_when_svt_is_missing():
+    # The Windows FFmpeg build has libaom-av1 but no libsvtav1
+    c = ConvertChoices(fmt="MKV", video_quality="balanced", codec="av1")
+    cmd, _ = build_command("ffmpeg", "in.mp4", "out.mkv", c, H264, {"libx264", "libaom-av1"})
+    assert cmd[cmd.index("-c:v") + 1] == "libaom-av1" and cmd[cmd.index("-b:v") + 1] == "0"
+    cmd, _ = build_command("ffmpeg", "in.mp4", "out.mkv", c, H264, {"libsvtav1", "libaom-av1"})
+    assert cmd[cmd.index("-c:v") + 1] == "libsvtav1"
+
+
+def test_missing_encoder_says_so():
+    c = ConvertChoices(fmt="MKV", video_quality="balanced", codec="av1")
+    with pytest.raises(ValueError, match="AV1"):
+        build_command("ffmpeg", "in.mp4", "out.mkv", c, H264, {"libx264"})
+
+
+def test_bundled_ffmpeg_has_the_encoders_vortex_uses():
+    have = encoders(FFMPEG)
+    for name in ("libx264", "libx265", "libvpx-vp9", "libmp3lame", "aac", "flac", "pcm_s16le", "libopus"):
+        assert name in have, name
+    assert have & {"libsvtav1", "libaom-av1"}, "no AV1 encoder"
+
+
+def test_real_av1_conversion(clip, tmp_path):
+    out = tmp_path / "av1.mkv"
+    c = ConvertChoices(fmt="MKV", video_quality="smallest", codec="av1", end="1")
+    job = ConvertJob(str(clip), str(out), c, ffmpeg=FFMPEG)
+    run_convert(job)
+    assert job.status == "done", job.error
+    assert probe(FFMPEG, str(out)).vcodec == "av1"
 
 
 @pytest.mark.parametrize("fmt,quality", [("MP4", "balanced"), ("MP3", "keep"), ("MKV", "keep")])

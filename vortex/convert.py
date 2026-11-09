@@ -103,6 +103,9 @@ _ENCODERS = {
     "vp9":  ("libvpx-vp9",  (30, 37, 41, 45), ["-b:v", "0", "-deadline", "good", "-cpu-used", "4", "-row-mt", "1"]),
     "av1":  ("libsvtav1",   (24, 32, 38, 44), ["-preset", "8"]),
 }
+# The Windows FFmpeg (gyan.dev "essentials" build) has no SVT-AV1, only the
+# slower libaom, which needs -b:v 0 for constant quality
+_AV1_FALLBACK = ("libaom-av1", ["-b:v", "0", "-cpu-used", "6", "-row-mt", "1"])
 _QUALITY_INDEX = {"high": 0, "balanced": 1, "small": 2, "smallest": 3}
 _MAX_HEIGHT = {"small": 720, "smallest": 480}
 
@@ -150,6 +153,23 @@ def probe(ffmpeg: str, path: str) -> MediaInfo:
     return info
 
 
+_encoders_cache: dict[str, set[str]] = {}
+
+
+def encoders(ffmpeg: str) -> set[str]:
+    """Names of the encoders this FFmpeg build has, from `ffmpeg -encoders`."""
+    if ffmpeg not in _encoders_cache:
+        try:
+            r = subprocess.run([ffmpeg, "-hide_banner", "-encoders"], capture_output=True, text=True,
+                               encoding="utf-8", errors="replace", timeout=30, **SUBPROCESS_FLAGS)
+            # lines look like " V....D libx264   libx264 H.264 / AVC ..."
+            _encoders_cache[ffmpeg] = set(re.findall(r"^ [VAS][.A-Z]{5} (\S+)", r.stdout, re.MULTILINE))
+        except Exception as e:
+            log.warning("Could not list FFmpeg encoders: %s", e)
+            _encoders_cache[ffmpeg] = set()
+    return _encoders_cache[ffmpeg]
+
+
 def parse_time(text: str) -> str | None:
     """'90', '1:30' or '00:01:30' -> '90.0' seconds for ffmpeg. None if empty.
     Raises ValueError for anything else."""
@@ -176,8 +196,11 @@ class ConvertChoices:
     end: str | None = None
 
 
-def build_command(ffmpeg: str, inp: str, out: str, c: ConvertChoices, info: MediaInfo) -> tuple[list[str], str]:
-    """The ffmpeg command, and a plain sentence about what it will do."""
+def build_command(ffmpeg: str, inp: str, out: str, c: ConvertChoices, info: MediaInfo,
+                  available: set[str] | None = None) -> tuple[list[str], str]:
+    """The ffmpeg command, and a plain sentence about what it will do.
+    available: the FFmpeg build's encoders (see encoders()); None assumes
+    every encoder is there."""
     cmd = [ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin"]
     if c.start:
         cmd += ["-ss", c.start]       # before -i: jumps straight there, fast
@@ -209,6 +232,12 @@ def build_command(ffmpeg: str, inp: str, out: str, c: ConvertChoices, info: Medi
                 quality = "balanced"   # the format can't hold the original video
             codec = c.codec if c.codec in FORMAT_CODECS[c.fmt] else FORMAT_CODECS[c.fmt][0]
             encoder, values, extra = _ENCODERS[codec]
+            if available is not None and encoder not in available:
+                if codec == "av1" and _AV1_FALLBACK[0] in available:
+                    encoder, extra = _AV1_FALLBACK
+                else:
+                    raise ValueError(f"The FFmpeg in Vortex can't make {CODECS[codec][0].split(' ·')[0]} "
+                                     "video. Pick another video codec under More options.")
             cmd += ["-c:v", encoder, "-crf", str(values[_QUALITY_INDEX[quality]])] + extra
             if quality in _MAX_HEIGHT and info.height > _MAX_HEIGHT[quality]:
                 cmd += ["-vf", f"scale=-2:{_MAX_HEIGHT[quality]}"]
@@ -287,7 +316,8 @@ def run_convert(job: ConvertJob) -> None:
     started = time.monotonic()
     try:
         info = probe(job.ffmpeg, job.inp)
-        cmd, job.what = build_command(job.ffmpeg, job.inp, job.out, job.choices, info)
+        cmd, job.what = build_command(job.ffmpeg, job.inp, job.out, job.choices, info,
+                                      encoders(job.ffmpeg))
         total = info.duration
         if job.choices.end:
             total = float(job.choices.end) - float(job.choices.start or 0)
