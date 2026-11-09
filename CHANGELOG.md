@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.5
 
 - Fixed: Convert with the AV1 codec failed on Windows ("Encoder not found").
   The Windows FFmpeg has no SVT-AV1, so Vortex uses libaom there; when an
